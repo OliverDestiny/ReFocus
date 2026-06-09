@@ -9,10 +9,9 @@ from PIL import Image
 
 import fooocus_version
 import modules.config
-import modules.sdxl_styles
 from modules.flags import MetadataScheme, Performance, Steps
 from modules.flags import lora_count, SAMPLERS, CIVITAI_NO_KARRAS
-from modules.util import quote, unquote, extract_styles_from_prompt, is_json, calculate_sha256
+from modules.util import quote, unquote, is_json, calculate_sha256
 
 re_param_code = r'\s*(\w[\w \-/]+):\s*("(?:\\.|[^\\"])+"|[^,]*)(?:,|$)'
 re_param = re.compile(re_param_code)
@@ -318,7 +317,9 @@ class A1111MetadataParser(MetadataParser):
             else:
                 metadata_prompt += ('' if metadata_prompt == '' else "\n") + line
 
-        found_styles, prompt, negative_prompt = extract_styles_from_prompt(metadata_prompt, metadata_negative_prompt)
+        # Style system removed — keep prompts as-is
+        prompt = metadata_prompt
+        negative_prompt = metadata_negative_prompt
 
         data = {
             'prompt': prompt,
@@ -341,16 +342,14 @@ class A1111MetadataParser(MetadataParser):
         # workaround for multiline prompts
         if 'raw_prompt' in data:
             data['prompt'] = data['raw_prompt']
-            raw_prompt = data['raw_prompt'].replace("\n", ', ')
-            if metadata_prompt != raw_prompt and modules.sdxl_styles.fooocus_expansion not in found_styles:
-                found_styles.append(modules.sdxl_styles.fooocus_expansion)
 
         if 'raw_negative_prompt' in data:
             data['negative_prompt'] = data['raw_negative_prompt']
 
-        data['styles'] = str(found_styles)
+        # Style system removed — no styles
+        data['styles'] = "[]"
 
-        # try to load performance based on steps, fallback for direct A1111 imports
+        # try to load performance based on steps
         if 'steps' in data and 'performance' not in data:
             try:
                 data['performance'] = Performance[Steps(int(data['steps'])).name].value
@@ -359,7 +358,6 @@ class A1111MetadataParser(MetadataParser):
 
         if 'sampler' in data:
             data['sampler'] = data['sampler'].replace(' Karras', '')
-            # get key
             for k, v in SAMPLERS.items():
                 if v == data['sampler']:
                     data['sampler'] = k

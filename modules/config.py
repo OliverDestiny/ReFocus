@@ -4,7 +4,6 @@ import math
 import numbers
 import args_manager
 import modules.flags
-import modules.sdxl_styles
 
 from modules.model_loader import load_file_from_url
 from modules.util import get_files_from_folder
