@@ -46,7 +46,6 @@ def worker():
 
     from modules.censor import censor_batch
 
-    from modules.sdxl_styles import apply_style, apply_wildcards, fooocus_expansion
     from modules.private_logger import log
     from extras.expansion import safe_str
     from modules.util import remove_empty_str, HWC3, resize_image, \
@@ -142,7 +141,6 @@ def worker():
         prompt = args.pop()
         negative_prompt = args.pop()
         translate_prompts = args.pop()
-        style_selections = args.pop()
         performance_selection = Performance(args.pop())
         aspect_ratios_selection = args.pop()
         image_number = args.pop()
@@ -214,16 +212,10 @@ def worker():
 
         outpaint_selections = [o.lower() for o in outpaint_selections]
         base_model_additional_loras = []
-        raw_style_selections = copy.deepcopy(style_selections)
+        raw_style_selections = []
+        use_expansion = False
+        
         uov_method = uov_method.lower()
-
-        if fooocus_expansion in style_selections:
-            use_expansion = True
-            style_selections.remove(fooocus_expansion)
-        else:
-            use_expansion = False
-
-        use_style = len(style_selections) > 0
 
         if base_model_name == refiner_model_name:
             print(f'Refiner disabled because base model and refiner are same.')
@@ -424,29 +416,26 @@ def worker():
 
             progressbar(async_task, 3, 'Processing prompts ...')
             tasks = []
-            
+
             for i in range(image_number):
                 task_seed = (seed + i) % (constants.MAX_SEED + 1)  # randint is inclusive, % is not
-                task_rng = random.Random(task_seed)  # may bind to inpaint noise in the future
 
-                task_prompt = apply_wildcards(prompt, task_rng)
-                task_negative_prompt = apply_wildcards(negative_prompt, task_rng)
-                task_extra_positive_prompts = [apply_wildcards(pmt, task_rng) for pmt in extra_positive_prompts]
-                task_extra_negative_prompts = [apply_wildcards(pmt, task_rng) for pmt in extra_negative_prompts]
+                # No wildcards, no style expansion: use prompts as-is
+                task_prompt = prompt
+                task_negative_prompt = negative_prompt
+                task_extra_positive_prompts = extra_positive_prompts
+                task_extra_negative_prompts = extra_negative_prompts
 
                 positive_basic_workloads = []
                 negative_basic_workloads = []
 
-                if use_style:
-                    for s in style_selections:
-                        p, n = apply_style(s, positive=task_prompt)
-                        positive_basic_workloads = positive_basic_workloads + p
-                        negative_basic_workloads = negative_basic_workloads + n
-                else:
-                    positive_basic_workloads.append(task_prompt)
+                # No style system: just use the main prompt
+                positive_basic_workloads.append(task_prompt)
 
-                negative_basic_workloads.append(task_negative_prompt)  # Always use independent workload for negative.
+                # Always use independent workload for negative.
+                negative_basic_workloads.append(task_negative_prompt)
 
+                # Add extra prompts as-is
                 positive_basic_workloads = positive_basic_workloads + task_extra_positive_prompts
                 negative_basic_workloads = negative_basic_workloads + task_extra_negative_prompts
 

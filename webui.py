@@ -11,18 +11,18 @@ import modules.async_worker as worker
 import modules.constants as constants
 import modules.flags as flags
 import modules.gradio_hijack as grh
-import modules.style_sorter as style_sorter
+
 import modules.meta_parser
 from modules.rembg import rembg_run
-from modules.load_online import load_demos_names, load_tools_names, load_demos_url, load_tools_url
+
 import args_manager
 import copy
 import launch
 
-from modules.sdxl_styles import legal_style_names
+
 from modules.private_logger import get_current_html_path
 from modules.ui_gradio_extensions import reload_javascript
-from modules.auth import auth_enabled, check_auth
+
 from modules.util import is_json
 
 PHOTOPEA_MAIN_URL = "https://www.photopea.com/"
@@ -188,17 +188,6 @@ with shared.gradio_root:
                     rembg_output = grh.Image(label='rembg Output', interactive=False, height=380)
                 gr.Markdown("Powered by [🪄 rembg 2.0.53](https://github.com/danielgatis/rembg/releases/tag/v2.0.53)")
             rembg_button.click(rembg_run, inputs=rembg_input, outputs=rembg_output, show_progress="full") 
-            with gr.Tab("Online"):
-                with gr.Tab("Demos"):
-                    for name in load_demos_names():
-                        url = load_demos_url(name)
-                        with gr.Tab(name):
-                            gr.HTML(f"<iframe src='{url}' width='100%' height='1080px' style='border-radius: 8px;'></iframe>")
-                with gr.Tab("Tools"):
-                    for name in load_tools_names():
-                        url = load_tools_url(name)
-                        with gr.Tab(name):
-                            gr.HTML(f"<iframe src='{url}' width='100%' height='1080px' style='border-radius: 8px;'></iframe>")
 
             with gr.Row(elem_classes='type_row'):
                 with gr.Column(scale=17):
@@ -470,39 +459,6 @@ with shared.gradio_root:
                 history_link = gr.HTML()
                 shared.gradio_root.load(update_history_link, outputs=history_link, queue=False, show_progress=False)
 
-            with gr.Tab(label='Styles'):
-                style_sorter.try_load_sorted_styles(
-                    style_names=legal_style_names,
-                    default_selected=modules.config.default_styles)
-
-                style_search_bar = gr.Textbox(show_label=False, container=False,
-                                              placeholder="\U0001F50E Type here to search styles ...",
-                                              value="",
-                                              label='Search Styles')
-                style_selections = gr.CheckboxGroup(show_label=False, container=False,
-                                                    choices=copy.deepcopy(style_sorter.all_styles),
-                                                    value=copy.deepcopy(modules.config.default_styles),
-                                                    label='Selected Styles',
-                                                    elem_classes=['style_selections'])
-                gradio_receiver_style_selections = gr.Textbox(elem_id='gradio_receiver_style_selections', visible=False)
-
-                shared.gradio_root.load(lambda: gr.update(choices=copy.deepcopy(style_sorter.all_styles)),
-                                        outputs=style_selections)
-
-                style_search_bar.change(style_sorter.search_styles,
-                                        inputs=[style_selections, style_search_bar],
-                                        outputs=style_selections,
-                                        queue=False,
-                                        show_progress=False).then(
-                    lambda: None, _js='()=>{refresh_style_localization();}')
-
-                gradio_receiver_style_selections.input(style_sorter.sort_styles,
-                                                       inputs=style_selections,
-                                                       outputs=style_selections,
-                                                       queue=False,
-                                                       show_progress=False).then(
-                    lambda: None, _js='()=>{refresh_style_localization();}')
-
             with gr.Tab(label='Models'):
                 with gr.Group():
                     with gr.Row():
@@ -734,7 +690,7 @@ with shared.gradio_root:
                 
         state_is_generating = gr.State(False)
 
-        load_data_outputs = [advanced_checkbox, image_number, prompt, negative_prompt, style_selections,
+        load_data_outputs = [advanced_checkbox, image_number, prompt, negative_prompt, 
                              performance_selection, overwrite_step, overwrite_switch, aspect_ratios_selection,
                              overwrite_width, overwrite_height, guidance_scale, sharpness, adm_scaler_positive,
                              adm_scaler_negative, adm_scaler_end, refiner_swap_method, adaptive_cfg, base_model,
@@ -760,9 +716,13 @@ with shared.gradio_root:
 
                 return modules.meta_parser.load_parameter_button_click(json.dumps(preset_prepared), is_generating)
 
-            preset_selection.change(preset_selection_change, inputs=[preset_selection, state_is_generating], outputs=load_data_outputs, queue=False, show_progress=True) \
-                .then(fn=style_sorter.sort_styles, inputs=style_selections, outputs=style_selections, queue=False, show_progress=False) \
-                .then(lambda: None, _js='()=>{refresh_style_localization();}')
+            preset_selection.change(
+                preset_selection_change,
+                inputs=[preset_selection, state_is_generating],
+                outputs=load_data_outputs,
+                queue=False,
+                show_progress=True
+            )
 
 
         performance_selection.change(lambda x: [gr.update(interactive=x != 'Extreme Speed')] * 11 +
@@ -816,7 +776,7 @@ with shared.gradio_root:
 
         ctrls = [currentTask, generate_image_grid]
         ctrls += [
-            prompt, negative_prompt, translate_prompts, style_selections,
+            prompt, negative_prompt, translate_prompts, 
             performance_selection, aspect_ratios_selection, image_number, output_format, image_seed, sharpness, guidance_scale
         ]
 
@@ -867,8 +827,13 @@ with shared.gradio_root:
 
             return modules.meta_parser.load_parameter_button_click(parsed_parameters, state_is_generating)
 
-        metadata_import_button.click(trigger_metadata_import, inputs=[metadata_input_image, state_is_generating], outputs=load_data_outputs, queue=False, show_progress=True) \
-            .then(style_sorter.sort_styles, inputs=style_selections, outputs=style_selections, queue=False, show_progress=False)
+        metadata_import_button.click(
+            trigger_metadata_import,
+            inputs=[metadata_input_image, state_is_generating],
+            outputs=load_data_outputs,
+            queue=False,
+            show_progress=True
+        )
 
         generate_button.click(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), [], True),
                               outputs=[stop_button, skip_button, generate_button, gallery, state_is_generating]) \
@@ -883,24 +848,35 @@ with shared.gradio_root:
         def trigger_describe(mode, img):
             if mode == flags.desc_type_photo:
                 from extras.interrogate import default_interrogator as default_interrogator_photo
-                return default_interrogator_photo(img), ["Fooocus V2", "Fooocus Enhance", "Fooocus Sharp"]
+                return default_interrogator_photo(img)
+
             if mode == flags.desc_type_anime:
                 from extras.wd14tagger import default_interrogator as default_interrogator_anime
-                return default_interrogator_anime(img), ["Fooocus V2", "Fooocus Masterpiece"]
-            return mode, ["Fooocus V2"]
+                return default_interrogator_anime(img)
 
-        desc_btn.click(trigger_describe, inputs=[desc_method, desc_input_image],
-                       outputs=[prompt, style_selections], show_progress=True, queue=True)
+            # fallback: return mode text as prompt
+            return mode
 
+        desc_btn.click(
+            trigger_describe,
+            inputs=[desc_method, desc_input_image],
+            outputs=[prompt],
+            show_progress=True,
+            queue=True
+        )
         def trigger_uov_describe(mode, img, prompt):
-            # keep prompt if not empty
             if prompt == '':
                 return trigger_describe(mode, img)
-            return gr.update(), gr.update()
+            return gr.update()
 
-        uov_input_image.upload(trigger_uov_describe, inputs=[desc_method, uov_input_image, prompt],
-                       outputs=[prompt, style_selections], show_progress=True, queue=True)
-
+        uov_input_image.upload(
+            trigger_uov_describe,
+            inputs=[desc_method, uov_input_image, prompt],
+            outputs=[prompt],
+            show_progress=True,
+            queue=True
+        )
+        
 def dump_default_english_config():
     from modules.localization import dump_english_config
     dump_english_config(grh.all_components)
@@ -914,7 +890,7 @@ shared.gradio_root.launch(
     server_port=args_manager.args.port,
     share=args_manager.args.share,
     favicon_path="assets/favicon.png",
-    auth=check_auth if (args_manager.args.share or args_manager.args.listen) and auth_enabled else None,
+    auth=None,
     blocked_paths=[constants.AUTH_FILENAME],
     # local modified start for reviewing log
     allowed_paths=[modules.config.path_outputs]

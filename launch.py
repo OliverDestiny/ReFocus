@@ -26,7 +26,6 @@ ssl._create_default_https_context = ssl._create_unverified_context
 import platform
 import fooocus_version
 
-from build_launcher import build_launcher
 from modules.launch_util import is_installed, run, python, run_pip, requirements_met
 from modules.model_loader import load_file_from_url
 
@@ -81,7 +80,6 @@ def ini_args():
 
 
 prepare_environment()
-build_launcher()
 args = ini_args()
 
 if args.gpu_device_id is not None:
