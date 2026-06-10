@@ -2,28 +2,7 @@
     "default_model": "steinillustrious_V16.safetensors",
     "default_refiner": "None",
     "default_refiner_switch": 0.5,
-    "default_loras": [
-        [
-            "None",
-            1.0
-        ],
-        [
-            "None",
-            1.0
-        ],
-        [
-            "None",
-            1.0
-        ],
-        [
-            "None",
-            1.0
-        ],
-        [
-            "None",
-            1.0
-        ]
-    ],
+    "default_loras": [],
     "default_cfg_scale": 7.0,
     "default_sample_sharpness": 2.0,
     "default_sampler": "euler",
@@ -31,13 +10,6 @@
     "default_performance": "Speed",
     "default_prompt": "",
     "default_prompt_negative": "company name,signature,company mark,watermark,text,bad hands,extra fingers,missing fingers,worst quality,bad quality,blurred,wrong structure,wrong hands,overly bright,overexposure,oversaturation,unnatural color,censorship,censored,bad color,worst quality,extra arms,extra legs,",
-    "default_styles": [],
     "default_aspect_ratio": "1024*1536",
-    "default_overwrite_step": -1,
-    "checkpoint_downloads": {
-        "steinillustrious_V16.safetensors": ""
-    },
-    "embeddings_downloads": {},
-    "lora_downloads": {},
-    "previous_default_models": []
+    "default_overwrite_step": -1
 }

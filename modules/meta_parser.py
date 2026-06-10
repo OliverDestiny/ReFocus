@@ -30,7 +30,6 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
 
     get_str('prompt', 'Prompt', loaded_parameter_dict, results)
     get_str('negative_prompt', 'Negative Prompt', loaded_parameter_dict, results)
-    get_list('styles', 'Styles', loaded_parameter_dict, results)
     get_str('performance', 'Performance', loaded_parameter_dict, results)
     get_steps('steps', 'Steps', loaded_parameter_dict, results)
     get_float('overwrite_switch', 'Overwrite Switch', loaded_parameter_dict, results)
@@ -206,11 +205,13 @@ def parse_meta_from_preset(preset_content):
                 width, height = default_aspect_ratio.split('×')
                 height = height[:height.index(" ")]
             preset_prepared[meta_key] = (width, height)
-        else:
-            preset_prepared[meta_key] = items[settings_key] if settings_key in items and items[settings_key] is not None else getattr(modules.config, settings_key)
-        
-        if settings_key == "default_styles" or settings_key == "default_aspect_ratio":
             preset_prepared[meta_key] = str(preset_prepared[meta_key])
+        else:
+            preset_prepared[meta_key] = (
+                items[settings_key]
+                if settings_key in items and items[settings_key] is not None
+                else getattr(modules.config, settings_key)
+            )
 
     return preset_prepared
 
@@ -272,7 +273,6 @@ class A1111MetadataParser(MetadataParser):
         'raw_prompt': 'Raw prompt',
         'raw_negative_prompt': 'Raw negative prompt',
         'negative_prompt': 'Negative prompt',
-        'styles': 'Styles',
         'performance': 'Performance',
         'steps': 'Steps',
         'sampler': 'Sampler',

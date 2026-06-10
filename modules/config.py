@@ -297,15 +297,6 @@ default_scheduler = get_config_item_or_set_default(
     default_value='karras',
     validator=lambda x: x in modules.flags.scheduler_list
 )
-default_styles = get_config_item_or_set_default(
-    key='default_styles',
-    default_value=[
-        "Fooocus V2",
-        "Fooocus Enhance",
-        "Fooocus Sharp"
-    ],
-    validator=lambda x: isinstance(x, list) and all(y in modules.sdxl_styles.legal_style_names for y in x)
-)
 default_prompt_negative = get_config_item_or_set_default(
     key='default_prompt_negative',
     default_value='',
@@ -464,7 +455,6 @@ possible_preset_keys = {
     "default_performance": "performance",
     "default_prompt": "prompt",
     "default_prompt_negative": "negative_prompt",
-    "default_styles": "styles",
     "default_aspect_ratio": "resolution",
     "checkpoint_downloads": "checkpoint_downloads",
     "embeddings_downloads": "embeddings_downloads",
