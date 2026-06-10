@@ -317,7 +317,6 @@ class A1111MetadataParser(MetadataParser):
             else:
                 metadata_prompt += ('' if metadata_prompt == '' else "\n") + line
 
-        # Style system removed — keep prompts as-is
         prompt = metadata_prompt
         negative_prompt = metadata_negative_prompt
 
@@ -345,9 +344,6 @@ class A1111MetadataParser(MetadataParser):
 
         if 'raw_negative_prompt' in data:
             data['negative_prompt'] = data['raw_negative_prompt']
-
-        # Style system removed — no styles
-        data['styles'] = "[]"
 
         # try to load performance based on steps
         if 'steps' in data and 'performance' not in data:

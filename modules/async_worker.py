@@ -47,8 +47,7 @@ def worker():
     from modules.censor import censor_batch
 
     from modules.private_logger import log
-    from extras.expansion import safe_str
-    from modules.util import remove_empty_str, HWC3, resize_image, \
+    from modules.util import safe_str, remove_empty_str, HWC3, resize_image, \
         get_image_shape_ceil, set_image_shape_ceil, get_shape_ceil, resample_image, erode_or_dilate
     from modules.upscaler import perform_upscale
     from modules.flags import Performance, lora_count
@@ -212,8 +211,6 @@ def worker():
 
         outpaint_selections = [o.lower() for o in outpaint_selections]
         base_model_additional_loras = []
-        raw_style_selections = []
-        use_expansion = False
         
         uov_method = uov_method.lower()
 
@@ -402,10 +399,6 @@ def worker():
             prompt = prompts[0]
             negative_prompt = negative_prompts[0]
 
-            if prompt == '':
-                # disable expansion when empty since it is not meaningful and influences image prompt
-                use_expansion = False
-
             extra_positive_prompts = prompts[1:] if len(prompts) > 1 else []
             extra_negative_prompts = negative_prompts[1:] if len(negative_prompts) > 1 else []
 
@@ -420,7 +413,6 @@ def worker():
             for i in range(image_number):
                 task_seed = (seed + i) % (constants.MAX_SEED + 1)  # randint is inclusive, % is not
 
-                # No wildcards, no style expansion: use prompts as-is
                 task_prompt = prompt
                 task_negative_prompt = negative_prompt
                 task_extra_positive_prompts = extra_positive_prompts
@@ -429,7 +421,6 @@ def worker():
                 positive_basic_workloads = []
                 negative_basic_workloads = []
 
-                # No style system: just use the main prompt
                 positive_basic_workloads.append(task_prompt)
 
                 # Always use independent workload for negative.
@@ -448,7 +439,6 @@ def worker():
                     task_negative_prompt=task_negative_prompt,
                     positive=positive_basic_workloads,
                     negative=negative_basic_workloads,
-                    expansion='',
                     c=None,
                     uc=None,
                     positive_top_k=len(positive_basic_workloads),
@@ -456,14 +446,6 @@ def worker():
                     log_positive_prompt='\n'.join([task_prompt] + task_extra_positive_prompts),
                     log_negative_prompt='\n'.join([task_negative_prompt] + task_extra_negative_prompts),
                 ))
-
-            if use_expansion:
-                for i, t in enumerate(tasks):
-                    progressbar(async_task, 5, f'Preparing Fooocus text #{i + 1} ...')
-                    expansion = pipeline.final_expansion(t['task_prompt'], t['task_seed'])
-                    print(f'[Prompt Expansion] {expansion}')
-                    t['expansion'] = expansion
-                    t['positive'] = copy.deepcopy(t['positive']) + [expansion]  # Deep copy.
 
             for i, t in enumerate(tasks):
                 progressbar(async_task, 7, f'Encoding positive #{i + 1} ...')
@@ -819,8 +801,6 @@ def worker():
                 for x in imgs:
                     d = [('Prompt', 'prompt', task['log_positive_prompt']),
                          ('Negative Prompt', 'negative_prompt', task['log_negative_prompt']),
-                         ('Fooocus V2 Expansion', 'prompt_expansion', task['expansion']),
-                         ('Styles', 'styles', str(raw_style_selections)),
                          ('Performance', 'performance', performance_selection.value),
                          ('Steps', 'steps', steps),
                          ('Resolution', 'resolution', str((width, height))),
