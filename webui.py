@@ -501,24 +501,6 @@ with shared.gradio_root:
                                             choices=modules.flags.output_formats,
                                             value=modules.config.default_output_format)
 
-                play_notification = gr.Checkbox(label='Play notification after rendering', value=False)
-                notification_file = 'notification.mp3'
-                if os.path.exists(notification_file):
-                    notification = gr.State(value=notification_file)
-                    notification_input = gr.Audio(label='Notification', interactive=True, elem_id='audio_notification', visible=False, show_edit_button=False)
-
-                    def play_notification_checked(r, notification):
-                        return gr.update(visible=r, value=notification if r else None)
-
-                    def notification_input_changed(notification_input, notification):
-                        if notification_input:
-                            notification = notification_input
-                        return notification
-
-                    play_notification.change(fn=play_notification_checked, inputs=[play_notification, notification], outputs=[notification_input], queue=False)
-                    notification_input.change(fn=notification_input_changed, inputs=[notification_input, notification], outputs=[notification], queue=False)
-
-
                 dev_mode = gr.Checkbox(label='Advanced mode', value=True, container=False)
 
                 with gr.Column(visible=True) as dev_tools:
@@ -844,7 +826,7 @@ with shared.gradio_root:
             .then(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), gr.update(visible=False, interactive=False), False),
                   outputs=[generate_button, stop_button, skip_button, state_is_generating]) \
             .then(fn=update_history_link, outputs=history_link) \
-            .then(fn=lambda: None, _js='playNotification').then(fn=lambda: None, _js='refresh_grid_delayed')
+            .then(fn=lambda: None, _js='refresh_grid_delayed')
 
         def trigger_describe(mode, img):
             if mode == flags.desc_type_photo:
