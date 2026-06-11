@@ -15,7 +15,6 @@ from modules.sample_hijack import clip_separate
 model_base = core.StableDiffusionModel()
 model_refiner = core.StableDiffusionModel()
 
-final_expansion = None
 final_unet = None
 final_clip = None
 final_vae = None
@@ -207,7 +206,7 @@ def prepare_text_encoder(async_call=True):
         # TODO: make sure that this is always called in an async way so that users cannot feel it.
         pass
     assert_model_integrity()
-    ldm_patched.modules.model_management.load_models_gpu([final_clip.patcher, final_expansion.patcher])
+    ldm_patched.modules.model_management.load_models_gpu([final_clip.patcher])
     return
 
 
@@ -215,7 +214,7 @@ def prepare_text_encoder(async_call=True):
 @torch.inference_mode()
 def refresh_everything(refiner_model_name, base_model_name, loras,
                        base_model_additional_loras=None, use_synthetic_refiner=False):
-    global final_unet, final_clip, final_vae, final_refiner_unet, final_refiner_vae, final_expansion
+    global final_unet, final_clip, final_vae, final_refiner_unet, final_refiner_vae
 
     final_unet = None
     final_clip = None
