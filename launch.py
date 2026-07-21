@@ -1,6 +1,8 @@
 import os
 import sys
 
+from prompt_helper.prompt_helper_launch import start_prompt_helper
+
 # Local modifications
 if "--listen" not in sys.argv:
     sys.argv.append("--listen")
@@ -26,6 +28,9 @@ if args.gpu_device_id is not None:
 
 from modules import config
 os.environ["U2NET_HOME"] = config.path_inpaint
+
+# start the prompt helper service PORT 17860
+start_prompt_helper()
 
 # Start the UI
 from webui import *

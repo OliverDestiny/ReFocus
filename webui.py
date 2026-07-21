@@ -16,14 +16,38 @@ import modules.meta_parser
 from modules.rembg import rembg_run
 
 import args_manager
-import copy
-import launch
-
 
 from modules.private_logger import get_current_html_path
 from modules.ui_gradio_extensions import reload_javascript
 
 from modules.util import is_json
+
+from pathlib import Path
+
+def get_prompt_helper_port():
+    """
+    from prompt_helper/.env read APP_PORT, default: 17860
+    """
+    env_file = Path(__file__).parent / 'prompt_helper' / '.env'
+    default_port = 17860
+    if not env_file.exists():
+        return default_port
+    try:
+        with open(env_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('APP_PORT='):
+                    value = line.split('=', 1)[1].strip()
+                    if value.isdigit():
+                        return int(value)
+                    else:
+                        print(f"[Prompt Helper] Warning: Invalid APP_PORT value '{value}', using default {default_port}")
+                        return default_port
+    except Exception as e:
+        print(f"[Prompt Helper] Error reading .env: {e}, using default {default_port}")
+    return default_port
+
+PROMPT_HELPER_PORT = get_prompt_helper_port()
 
 PHOTOPEA_MAIN_URL = "https://www.photopea.com/"
 PHOTOPEA_IFRAME_ID = "webui-photopea-iframe"
@@ -188,7 +212,8 @@ with shared.gradio_root:
                     rembg_output = grh.Image(label='rembg Output', interactive=False, height=380)
                 gr.Markdown("Powered by [🪄 rembg 2.0.53](https://github.com/danielgatis/rembg/releases/tag/v2.0.53)")
             rembg_button.click(rembg_run, inputs=rembg_input, outputs=rembg_output, show_progress="full") 
-
+            with gr.Tab("Prompt Helper"):
+                gr.HTML(f'<iframe src="http://127.0.0.1:{PROMPT_HELPER_PORT}/?__theme=dark" width="100%" height="800px" frameborder="0"></iframe>')
             with gr.Row(elem_classes='type_row'):
                 with gr.Column(scale=17):
                     prompt = gr.Textbox(show_label=False, placeholder="Type prompt here or paste parameters.", elem_id='positive_prompt',
