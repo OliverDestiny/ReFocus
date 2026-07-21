@@ -9,6 +9,8 @@ __pycache__
 *.corrupted
 *.partial
 *.onnx
+*.th
+*.csv
 sorted_styles.json
 /input
 /cache
@@ -51,3 +53,4 @@ user_path_config-deprecated.txt
 /.coverage*
 /auth.json
 /txt_for_upload_ms_copilot
+/presets/
