@@ -174,8 +174,7 @@ if isinstance(args_manager.args.preset, str):
 
 shared.gradio_root = gr.Blocks(
     title=title,
-    css=modules.html.css,
-    theme="ehristoforu/Indigo_Theme").queue()
+    css=modules.html.css).queue()
 
 with shared.gradio_root:
     currentTask = gr.State(worker.AsyncTask(args=[]))
