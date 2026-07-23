@@ -57,7 +57,17 @@ def reload_javascript():
     css = css_html()
 
     def template_response(*args, **kwargs):
-        res = GradioTemplateResponseOriginal(*args, **kwargs)
+        name = kwargs.get('template_name') or kwargs.get('name') or 'index.html'
+        
+        if args and isinstance(args[0], dict):
+            new_args = (name, args[0]) + args[1:]
+        else:
+            new_args = (name,) + args
+        try:
+            res = GradioTemplateResponseOriginal(*new_args, **kwargs)
+        except Exception as e:
+            print(f"[ERROR] template_response failed: {e}", flush=True)
+            return GradioTemplateResponseOriginal(*args, **kwargs)
         res.body = res.body.replace(b'</head>', f'{js}</head>'.encode("utf8"))
         res.body = res.body.replace(b'</body>', f'{css}</body>'.encode("utf8"))
         res.init_headers()

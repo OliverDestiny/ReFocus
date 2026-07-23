@@ -154,14 +154,13 @@ class Performance(Enum):
 
 
 performance_selections = [
-    ('Quality <span style="color: grey;"> \U00002223 45 steps</span>', Performance.QUALITY.value),
-    ('Speed <span style="color: grey;"> \U00002223 25 steps</span>', Performance.SPEED.value),
-    ('Extreme Speed <span style="color: grey;"> \U00002223 10 steps</span>', Performance.EXTREME_SPEED.value), # original was 8
-    # added choices
-    ('SPEED_A <span style="color: grey;"> \U00002223 15 steps</span>', Performance.SPEED_A.value),
-    ('SPEED_B <span style="color: grey;"> \U00002223 20 steps</span>', Performance.SPEED_B.value),
-    ('NORMAL_A <span style="color: grey;"> \U00002223 30 steps</span>', Performance.NORMAL_A.value),
-    ('NORMAL_B <span style="color: grey;"> \U00002223 35 steps</span>', Performance.NORMAL_B.value),
-    ('QUALITY_A <span style="color: grey;"> \U00002223 40 steps</span>', Performance.QUALITY_A.value),
-    ('QUALITY_B <span style="color: grey;"> \U00002223 50 steps</span>', Performance.QUALITY_B.value)
+    ('Quality (45 steps)', Performance.QUALITY.value),
+    ('Speed (25 steps)', Performance.SPEED.value),
+    ('Extreme Speed (10 steps)', Performance.EXTREME_SPEED.value),
+    ('SPEED_A (15 steps)', Performance.SPEED_A.value),
+    ('SPEED_B (20 steps)', Performance.SPEED_B.value),
+    ('NORMAL_A (30 steps)', Performance.NORMAL_A.value),
+    ('NORMAL_B (35 steps)', Performance.NORMAL_B.value),
+    ('QUALITY_A (40 steps)', Performance.QUALITY_A.value),
+    ('QUALITY_B (50 steps)', Performance.QUALITY_B.value)
 ]

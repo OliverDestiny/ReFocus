@@ -112,6 +112,18 @@ progress::after {
     margin-left: -5px !important;
 }
 
+.main_view img,
+.image_gallery img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+}
+
+.image_gallery {
+    height: 100% !important;
+    min-height: 600px;
+}
+
 '''
 progress_html = '''
 <div class="loader-container">

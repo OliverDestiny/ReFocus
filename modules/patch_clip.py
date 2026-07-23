@@ -7,7 +7,6 @@ import ldm_patched.k_diffusion.sampling
 import ldm_patched.ldm.modules.attention
 import ldm_patched.ldm.modules.diffusionmodules.model
 import ldm_patched.ldm.modules.diffusionmodules.openaimodel
-import ldm_patched.ldm.modules.diffusionmodules.openaimodel
 import ldm_patched.modules.args_parser
 import ldm_patched.modules.model_base
 import ldm_patched.modules.model_management
@@ -19,7 +18,16 @@ import ldm_patched.modules.clip_vision
 import ldm_patched.modules.ops as ops
 
 from modules.ops import use_patched_ops
-from transformers import CLIPTextModel, CLIPTextConfig, modeling_utils, CLIPVisionConfig, CLIPVisionModelWithProjection
+from transformers import CLIPTextModel, CLIPTextConfig, CLIPVisionConfig, CLIPVisionModelWithProjection
+
+# 兼容新旧 transformers 的 no_init_weights
+try:
+    from transformers.modeling_utils import no_init_weights
+except ImportError:
+    from contextlib import contextmanager
+    @contextmanager
+    def no_init_weights():
+        yield
 
 
 def patched_encode_token_weights(self, token_weight_pairs):
@@ -78,14 +86,21 @@ def patched_SDClipModel__init__(self, max_length=77, freeze=True, layer="last", 
     config = CLIPTextConfig.from_json_file(textmodel_json_config)
     self.num_layers = config.num_hidden_layers
 
-    with use_patched_ops(ops.manual_cast):
-        with modeling_utils.no_init_weights():
-            self.transformer = CLIPTextModel(config)
+    with use_patched_ops(ops.manual_cast), no_init_weights():
+        self.transformer = CLIPTextModel(config)
 
     if dtype is not None:
         self.transformer.to(dtype)
 
-    self.transformer.text_model.embeddings.to(torch.float32)
+    # 兼容不同 transformers 版本的结构
+    if hasattr(self.transformer, 'text_model'):
+        # 旧版结构（如 transformers 4.30 之前）
+        self.transformer.text_model.embeddings.to(torch.float32)
+        self.final_layer_norm = self.transformer.text_model.final_layer_norm
+    else:
+        # 新版结构（transformers 4.30+）
+        self.transformer.embeddings.to(torch.float32)
+        self.final_layer_norm = self.transformer.final_layer_norm
 
     if freeze:
         self.freeze()
@@ -133,7 +148,7 @@ def patched_SDClipModel_forward(self, tokens):
     else:
         z = outputs.hidden_states[self.layer_idx]
         if self.layer_norm_hidden_state:
-            z = self.transformer.text_model.final_layer_norm(z)
+            z = self.final_layer_norm(z)  # 使用保存的 final_layer_norm
 
     if hasattr(outputs, "pooler_output"):
         pooled_output = outputs.pooler_output.float()
@@ -157,9 +172,8 @@ def patched_ClipVisionModel__init__(self, json_config):
     else:
         self.dtype = torch.float32
 
-    with use_patched_ops(ops.manual_cast):
-        with modeling_utils.no_init_weights():
-            self.model = CLIPVisionModelWithProjection(config)
+    with use_patched_ops(ops.manual_cast), no_init_weights():
+        self.model = CLIPVisionModelWithProjection(config)
 
     self.model.to(self.dtype)
     self.patcher = ldm_patched.modules.model_patcher.ModelPatcher(
