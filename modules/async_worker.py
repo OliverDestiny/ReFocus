@@ -20,15 +20,12 @@ async_tasks = []
 def worker():
     global async_tasks
 
-    import os
     import traceback
     import math
     import numpy as np
     import torch
     import time
     import shared
-    import random
-    import copy
     import cv2
     import modules.default_pipeline as pipeline
     import modules.core as core
@@ -58,9 +55,15 @@ def worker():
 
     try:
         async_gradio_app = shared.gradio_root
-        flag = f'''App started successful. Use the app with {str(async_gradio_app.local_url)} or {str(async_gradio_app.server_name)}:{str(async_gradio_app.server_port)}'''
+        local_url = getattr(async_gradio_app, 'local_url', None)
+        if local_url:
+            flag = f'App started successful. Use the app with {local_url}'
+        else:
+            flag = 'App started successful.'
         if async_gradio_app.share:
-            flag += f''' or {async_gradio_app.share_url}'''
+            share_url = getattr(async_gradio_app, 'share_url', None)
+            if share_url:
+                flag += f' or {share_url}'
         print(flag)
     except Exception as e:
         print(e)
@@ -137,8 +140,8 @@ def worker():
         args = async_task.args
         args.reverse()
 
-        prompt = args.pop()
-        negative_prompt = args.pop()
+        prompt = args.pop() or ''
+        negative_prompt = args.pop() or ''
         translate_prompts = args.pop()
         performance_selection = Performance(args.pop())
         aspect_ratios_selection = args.pop()
@@ -157,7 +160,7 @@ def worker():
         uov_input_image = args.pop()
         outpaint_selections = args.pop()
         inpaint_input_image = args.pop()
-        inpaint_additional_prompt = args.pop()
+        inpaint_additional_prompt = args.pop() or ''
         inpaint_mask_image_upload = args.pop()
 
         disable_preview = args.pop()
@@ -292,6 +295,25 @@ def worker():
         tasks = []
 
         if input_image_checkbox:
+            # --- 下载 Inpaint 模型（如果需要） ---
+            inpaint_head_model_path = None
+            inpaint_patch_model_path = None
+            if inpaint_parameterized:
+                progressbar(async_task, 1, 'Downloading inpainter ...')
+                inpaint_head_model_path, inpaint_patch_model_path = modules.config.downloading_inpaint_models(inpaint_engine)
+                base_model_additional_loras += [(inpaint_patch_model_path, 1.0)]
+                print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
+                if refiner_model_name == 'None':
+                    use_synthetic_refiner = True
+                    refiner_switch = 0.5
+            else:
+                print(f'[Inpaint] Parameterized inpaint is disabled.')
+
+            # --- 计算 switch ---
+            switch = int(round(steps * refiner_switch))
+            if overwrite_switch > 0:
+                switch = overwrite_switch
+
             if (current_tab == 'uov' or (
                     current_tab == 'ip' and mixing_image_prompt_and_vary_upscale)) \
                     and uov_method != flags.disabled and uov_input_image is not None:
@@ -304,53 +326,100 @@ def worker():
                         skip_prompt_processing = True
                     else:
                         steps = performance_selection.steps_uov()
+                        # 重新计算 switch 因为 steps 已变
+                        switch = int(round(steps * refiner_switch))
+                        if overwrite_switch > 0:
+                            switch = overwrite_switch
 
                     progressbar(async_task, 1, 'Downloading upscale models ...')
                     modules.config.downloading_upscale_model()
-            if (current_tab == 'inpaint' or (
-                    current_tab == 'ip' and mixing_image_prompt_and_inpaint)) \
-                    and isinstance(inpaint_input_image, dict):
-                inpaint_image = inpaint_input_image['image']
-                inpaint_mask = inpaint_input_image['mask'][:, :, 0]
 
-                if inpaint_mask_upload_checkbox:
-                    if isinstance(inpaint_mask_image_upload, np.ndarray):
-                        if inpaint_mask_image_upload.ndim == 3:
-                            H, W, C = inpaint_image.shape
-                            inpaint_mask_image_upload = resample_image(inpaint_mask_image_upload, width=W, height=H)
-                            inpaint_mask_image_upload = np.mean(inpaint_mask_image_upload, axis=2)
-                            inpaint_mask_image_upload = (inpaint_mask_image_upload > 127).astype(np.uint8) * 255
-                            inpaint_mask = np.maximum(inpaint_mask, inpaint_mask_image_upload)
+            if (current_tab == 'inpaint' or (current_tab == 'ip' and mixing_image_prompt_and_inpaint)):
+                inpaint_image = None
+                inpaint_mask = None
 
-                if int(inpaint_erode_or_dilate) != 0:
-                    inpaint_mask = erode_or_dilate(inpaint_mask, inpaint_erode_or_dilate)
+                if isinstance(inpaint_input_image, dict):
+                    if 'image' in inpaint_input_image and 'mask' in inpaint_input_image:
+                        inpaint_image = inpaint_input_image['image']
+                        inpaint_mask = inpaint_input_image['mask']
+                        if inpaint_mask.ndim == 3:
+                            inpaint_mask = inpaint_mask[:, :, 0]
+                    else:
+                        bg = inpaint_input_image.get('background')
+                        if bg is not None:
+                            inpaint_image = bg
+                        else:
+                            inpaint_image = inpaint_input_image.get('composite')
+                            if inpaint_image is None:
+                                raise ValueError("No image data in ImageEditor output")
 
-                if invert_mask_checkbox:
-                    inpaint_mask = 255 - inpaint_mask
+                        if inpaint_image.dtype != np.uint8:
+                            if inpaint_image.max() <= 1.0:
+                                inpaint_image = (inpaint_image * 255).astype(np.uint8)
+                            else:
+                                inpaint_image = inpaint_image.astype(np.uint8)
+                        if inpaint_image.ndim == 3 and inpaint_image.shape[2] == 4:
+                            inpaint_image = inpaint_image[:, :, :3]  # 丢弃 alpha
+                        elif inpaint_image.ndim == 2:
+                            inpaint_image = cv2.cvtColor(inpaint_image, cv2.COLOR_GRAY2RGB)
+
+                        layers = inpaint_input_image.get('layers', [])
+                        if len(layers) == 0:
+                            print("[Inpaint] No mask layers found, skipping inpaint.")
+                            inpaint_mask = np.zeros((inpaint_image.shape[0], inpaint_image.shape[1]), dtype=np.uint8)
+                        else:
+                            mask_found = False
+                            for layer in layers:
+                                if layer is None:
+                                    continue
+                                if layer.dtype != np.uint8:
+                                    if layer.max() <= 1.0:
+                                        layer = (layer * 255).astype(np.uint8)
+                                    else:
+                                        layer = layer.astype(np.uint8)
+                                if layer.ndim == 3:
+                                    if layer.shape[2] == 4:
+                                        tmp_mask = layer[:, :, 3]
+                                    else:
+                                        tmp_mask = cv2.cvtColor(layer, cv2.COLOR_RGB2GRAY)
+                                else:
+                                    tmp_mask = layer
+                                if np.any(tmp_mask > 127):
+                                    inpaint_mask = tmp_mask
+                                    mask_found = True
+                                    break
+                            if not mask_found:
+                                inpaint_mask = np.zeros((inpaint_image.shape[0], inpaint_image.shape[1]), dtype=np.uint8)
+                                print("[Inpaint] No valid mask found in layers.")
+                else:
+                    inpaint_image = inpaint_input_image
+                    inpaint_mask = np.zeros((inpaint_image.shape[0], inpaint_image.shape[1]), dtype=np.uint8)
+
+                if inpaint_mask is None:
+                    inpaint_mask = np.zeros((inpaint_image.shape[0], inpaint_image.shape[1]), dtype=np.uint8)
+                else:
+                    if inpaint_mask.dtype != np.uint8:
+                        if inpaint_mask.max() <= 1.0:
+                            inpaint_mask = (inpaint_mask * 255).astype(np.uint8)
+                        else:
+                            inpaint_mask = inpaint_mask.astype(np.uint8)
+                    inpaint_mask = (inpaint_mask > 127).astype(np.uint8) * 255
 
                 inpaint_image = HWC3(inpaint_image)
                 if isinstance(inpaint_image, np.ndarray) and isinstance(inpaint_mask, np.ndarray) \
                         and (np.any(inpaint_mask > 127) or len(outpaint_selections) > 0):
                     progressbar(async_task, 1, 'Downloading upscale models ...')
                     modules.config.downloading_upscale_model()
-                    if inpaint_parameterized:
-                        progressbar(async_task, 1, 'Downloading inpainter ...')
-                        inpaint_head_model_path, inpaint_patch_model_path = modules.config.downloading_inpaint_models(
-                            inpaint_engine)
-                        base_model_additional_loras += [(inpaint_patch_model_path, 1.0)]
-                        print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
-                        if refiner_model_name == 'None':
-                            use_synthetic_refiner = True
-                            refiner_switch = 0.5
-                    else:
-                        inpaint_head_model_path, inpaint_patch_model_path = None, None
-                        print(f'[Inpaint] Parameterized inpaint is disabled.')
-                    if inpaint_additional_prompt != '':
-                        if prompt == '':
-                            prompt = inpaint_additional_prompt
-                        else:
-                            prompt = inpaint_additional_prompt + '\n' + prompt
                     goals.append('inpaint')
+                else:
+                    pass
+
+                if inpaint_additional_prompt != '':
+                    if prompt == '':
+                        prompt = inpaint_additional_prompt
+                    else:
+                        prompt = inpaint_additional_prompt + '\n' + prompt
+
             if current_tab == 'ip' or \
                     mixing_image_prompt_and_vary_upscale or \
                     mixing_image_prompt_and_inpaint:
@@ -363,36 +432,10 @@ def worker():
                 if len(cn_tasks[flags.cn_ip]) > 0:
                     clip_vision_path, ip_negative_path, ip_adapter_path = modules.config.downloading_ip_adapters('ip')
                 if len(cn_tasks[flags.cn_ip_face]) > 0:
-                    clip_vision_path, ip_negative_path, ip_adapter_face_path = modules.config.downloading_ip_adapters(
-                        'face')
+                    clip_vision_path, ip_negative_path, ip_adapter_face_path = modules.config.downloading_ip_adapters('face')
                 progressbar(async_task, 1, 'Loading control models ...')
 
-        # Load or unload CNs
-        pipeline.refresh_controlnets([controlnet_canny_path, controlnet_cpds_path])
-        ip_adapter.load_ip_adapter(clip_vision_path, ip_negative_path, ip_adapter_path)
-        ip_adapter.load_ip_adapter(clip_vision_path, ip_negative_path, ip_adapter_face_path)
-
-        if overwrite_step > 0:
-            steps = overwrite_step
-
-        switch = int(round(steps * refiner_switch))
-
-        if overwrite_switch > 0:
-            switch = overwrite_switch
-
-        if overwrite_width > 0:
-            width = overwrite_width
-
-        if overwrite_height > 0:
-            height = overwrite_height
-
-        print(f'[Parameters] Sampler = {sampler_name} - {scheduler_name}')
-        print(f'[Parameters] Steps = {steps} - {switch}')
-
-        progressbar(async_task, 1, 'Initializing ...')
-
         if not skip_prompt_processing:
-
             prompts = remove_empty_str([safe_str(p) for p in prompt.splitlines()], default='')
             negative_prompts = remove_empty_str([safe_str(p) for p in negative_prompt.splitlines()], default='')
 
@@ -403,15 +446,19 @@ def worker():
             extra_negative_prompts = negative_prompts[1:] if len(negative_prompts) > 1 else []
 
             progressbar(async_task, 3, 'Loading models ...')
-            pipeline.refresh_everything(refiner_model_name=refiner_model_name, base_model_name=base_model_name,
-                                        loras=loras, base_model_additional_loras=base_model_additional_loras,
-                                        use_synthetic_refiner=use_synthetic_refiner)
+            pipeline.refresh_everything(
+                refiner_model_name=refiner_model_name,
+                base_model_name=base_model_name,
+                loras=loras,
+                base_model_additional_loras=base_model_additional_loras,
+                use_synthetic_refiner=use_synthetic_refiner
+            )
 
             progressbar(async_task, 3, 'Processing prompts ...')
             tasks = []
 
             for i in range(image_number):
-                task_seed = (seed + i) % (constants.MAX_SEED + 1)  # randint is inclusive, % is not
+                task_seed = (seed + i) % (constants.MAX_SEED + 1)
 
                 task_prompt = prompt
                 task_negative_prompt = negative_prompt
@@ -422,11 +469,8 @@ def worker():
                 negative_basic_workloads = []
 
                 positive_basic_workloads.append(task_prompt)
-
-                # Always use independent workload for negative.
                 negative_basic_workloads.append(task_negative_prompt)
 
-                # Add extra prompts as-is
                 positive_basic_workloads = positive_basic_workloads + task_extra_positive_prompts
                 negative_basic_workloads = negative_basic_workloads + task_extra_negative_prompts
 
@@ -457,43 +501,6 @@ def worker():
                 else:
                     progressbar(async_task, 10, f'Encoding negative #{i + 1} ...')
                     t['uc'] = pipeline.clip_encode(texts=t['negative'], pool_top_k=t['negative_top_k'])
-
-        if len(goals) > 0:
-            progressbar(async_task, 13, 'Image processing ...')
-
-        if 'vary' in goals:
-            if 'subtle' in uov_method:
-                denoising_strength = 0.5
-            if 'strong' in uov_method:
-                denoising_strength = 0.85
-            if overwrite_vary_strength > 0:
-                denoising_strength = overwrite_vary_strength
-
-            shape_ceil = get_image_shape_ceil(uov_input_image)
-            if shape_ceil < 1024:
-                print(f'[Vary] Image is resized because it is too small.')
-                shape_ceil = 1024
-            elif shape_ceil > 2048:
-                print(f'[Vary] Image is resized because it is too big.')
-                shape_ceil = 2048
-
-            uov_input_image = set_image_shape_ceil(uov_input_image, shape_ceil)
-
-            initial_pixels = core.numpy_to_pytorch(uov_input_image)
-            progressbar(async_task, 13, 'VAE encoding ...')
-
-            candidate_vae, _ = pipeline.get_candidate_vae(
-                steps=steps,
-                switch=switch,
-                denoise=denoising_strength,
-                refiner_swap_method=refiner_swap_method
-            )
-
-            initial_latent = core.encode_vae(vae=candidate_vae, pixels=initial_pixels)
-            B, C, H, W = initial_latent['samples'].shape
-            width = W * 8
-            height = H * 8
-            print(f'Final resolution is {str((height, width))}.')
 
         if 'upscale' in goals:
             H, W, C = uov_input_image.shape

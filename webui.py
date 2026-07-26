@@ -12,11 +12,11 @@ import modules.constants as constants
 import modules.flags as flags
 import modules.meta_parser
 import args_manager
+import numpy as np
 
 from modules.private_logger import get_current_html_path
 from modules.localization import localization_js
 from modules.util import is_json
-from pathlib import Path
 
 # ========== 读取自定义 CSS/JS 并注入 ==========
 def get_custom_head():
@@ -140,9 +140,59 @@ title = f'DeFooocus {fooocus_version.version}'
 if isinstance(args_manager.args.preset, str):
     title += ' ' + args_manager.args.preset
 
-# 创建 Blocks（css 和 head 移到 launch 中）
 shared.gradio_root = gr.Blocks(title=title).queue()
 
+# ========== 转换函数：将 ImageEditor 输出转为旧版格式 ==========
+def convert_editor_to_legacy(editor_data):
+    """
+    将 gr.ImageEditor 的输出转换为旧版 async_worker 期望的格式。
+    旧版期望：
+        {
+            "image": numpy.ndarray,  # RGB, shape (H, W, 3), dtype uint8
+            "mask": numpy.ndarray    # RGBA, shape (H, W, 4), dtype uint8, 且红色通道为 mask
+        }
+    """
+    if editor_data is None:
+        return None
+
+    bg = editor_data.get("background")
+    if bg is None:
+        bg = editor_data.get("composite")
+    if bg is None:
+        return None
+
+    if bg.ndim == 3 and bg.shape[2] == 4:
+        bg = bg[:, :, :3]
+    elif bg.ndim == 2:
+        bg = np.stack([bg] * 3, axis=2)
+
+    H, W = bg.shape[:2]
+
+    mask = np.zeros((H, W), dtype=np.uint8)
+    layers = editor_data.get("layers", [])
+    for layer in layers:
+        if layer is None:
+            continue
+
+        if layer.shape[:2] != (H, W):
+            from modules.util import resample_image
+            layer = resample_image(layer, W, H)
+        if layer.ndim == 3 and layer.shape[2] == 4:
+            alpha = layer[:, :, 3]
+            mask = np.maximum(mask, alpha)
+        elif layer.ndim == 2:
+            mask = np.maximum(mask, layer)
+
+    mask = (mask > 127).astype(np.uint8) * 255
+    mask_rgba = np.zeros((H, W, 4), dtype=np.uint8)
+    mask_rgba[:, :, 0] = mask  # 红色通道
+
+    return {
+        "image": bg,
+        "mask": mask_rgba
+    }
+
+# ========== 构建 UI ==========
 with shared.gradio_root:
     currentTask = gr.State(worker.AsyncTask(args=[]))
     with gr.Row():
@@ -277,8 +327,14 @@ with shared.gradio_root:
                     with gr.TabItem(label='Inpaint or Outpaint') as inpaint_tab:
                         with gr.Row():
                             with gr.Column():
-                                # 移除 tool='sketch' 和 brush_color，因为 Gradio 6.x 不再支持
-                                inpaint_input_image = gr.Image(label='Drag inpaint or outpaint image to here', sources=['upload'], type='numpy', height=500, elem_id='inpaint_canvas')
+                                inpaint_input_image = gr.ImageEditor(
+                                    label='Drag inpaint or outpaint image to here',
+                                    sources=['upload'],
+                                    type='numpy',
+                                    height=500,
+                                    elem_id='inpaint_canvas'
+                                )
+                                inpaint_data_legacy = gr.State(value=None)
                                 inpaint_mode = gr.Dropdown(choices=modules.flags.inpaint_options, value=modules.flags.inpaint_option_default, label='Method')
                                 inpaint_additional_prompt = gr.Textbox(placeholder="Describe what you want to inpaint.", elem_id='inpaint_additional_prompt', label='Inpaint Additional Prompt', visible=False)
                                 outpaint_selections = gr.CheckboxGroup(choices=['Left', 'Right', 'Top', 'Bottom'], value=[], label='Outpaint Direction')
@@ -716,29 +772,57 @@ with shared.gradio_root:
 
             if mode == modules.flags.inpaint_option_detail:
                 return [
-                    gr.update(visible=True), gr.update(visible=False, value=[]),
-                    gr.Dataset.update(visible=True, samples=modules.config.example_inpaint_prompts),
-                    False, 'None', 0.5, 0.0
+                    gr.update(visible=True, value=''),
+                    gr.update(visible=False, value=[]),
+                    gr.update(visible=True),
+                    gr.update(value=False),
+                    gr.update(value='None'),
+                    gr.update(value=0.5),
+                    gr.update(value=0.0)
                 ]
-
-            if mode == modules.flags.inpaint_option_modify:
+            elif mode == modules.flags.inpaint_option_modify:
                 return [
-                    gr.update(visible=True), gr.update(visible=False, value=[]),
-                    gr.Dataset.update(visible=False, samples=modules.config.example_inpaint_prompts),
-                    True, modules.config.default_inpaint_engine_version, 1.0, 0.0
+                    gr.update(visible=True, value=''),
+                    gr.update(visible=False, value=[]),
+                    gr.update(visible=False),
+                    gr.update(value=False),
+                    gr.update(value=modules.config.default_inpaint_engine_version),
+                    gr.update(value=1.0),
+                    gr.update(value=0.0)
+                ]
+            else:  # 默认 'Inpaint or Outpaint (default)'
+                return [
+                    gr.update(visible=False, value=''),
+                    gr.update(visible=True, value=[]),
+                    gr.update(visible=False),
+                    gr.update(value=False),
+                    gr.update(value=modules.config.default_inpaint_engine_version),
+                    gr.update(value=1.0),
+                    gr.update(value=0.618)
                 ]
 
-            return [
-                gr.update(visible=False, value=''), gr.update(visible=True),
-                gr.Dataset.update(visible=False, samples=modules.config.example_inpaint_prompts),
-                False, modules.config.default_inpaint_engine_version, 1.0, 0.618
-            ]
+        inpaint_mode.change(
+            inpaint_mode_change,
+            inputs=inpaint_mode,
+            outputs=[
+                inpaint_additional_prompt,
+                outpaint_selections,
+                example_inpaint_prompts,
+                inpaint_disable_initial_latent,
+                inpaint_engine,
+                inpaint_strength,
+                inpaint_respective_field
+            ],
+            show_progress=False,
+            queue=False
+        )
 
-        inpaint_mode.input(inpaint_mode_change, inputs=inpaint_mode, outputs=[
-            inpaint_additional_prompt, outpaint_selections, example_inpaint_prompts,
-            inpaint_disable_initial_latent, inpaint_engine,
-            inpaint_strength, inpaint_respective_field
-        ], show_progress=False, queue=False)
+        inpaint_input_image.change(
+            fn=convert_editor_to_legacy,
+            inputs=inpaint_input_image,
+            outputs=inpaint_data_legacy,
+            queue=False
+        )
 
         ctrls = [currentTask, generate_image_grid]
         ctrls += [
@@ -749,7 +833,8 @@ with shared.gradio_root:
         ctrls += [base_model, refiner_model, refiner_switch] + lora_ctrls
         ctrls += [input_image_checkbox, current_tab]
         ctrls += [uov_method, uov_input_image]
-        ctrls += [outpaint_selections, inpaint_input_image, inpaint_additional_prompt, inpaint_mask_image]
+        # ========== 替换：将 inpaint_input_image 改为 inpaint_data_legacy ==========
+        ctrls += [outpaint_selections, inpaint_data_legacy, inpaint_additional_prompt, inpaint_mask_image]
         ctrls += [disable_preview, disable_intermediate_results, black_out_nsfw]
         ctrls += [adm_scaler_positive, adm_scaler_negative, adm_scaler_end, adaptive_cfg]
         ctrls += [sampler_name, scheduler_name]
@@ -842,10 +927,9 @@ with shared.gradio_root:
             queue=True
         )
 
-# ========== 启动 ==========
 shared.gradio_root.launch(
     inbrowser=args_manager.args.in_browser,
-    server_name=args_manager.args.listen,
+    server_name=args_manager.args.listen if args_manager.args.listen else None,
     server_port=args_manager.args.port,
     share=args_manager.args.share,
     favicon_path="assets/favicon.png",
