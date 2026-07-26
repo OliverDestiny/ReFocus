@@ -276,6 +276,10 @@ def worker():
 
         skip_prompt_processing = False
 
+        switch = int(round(steps * refiner_switch))
+        if overwrite_switch > 0:
+            switch = overwrite_switch
+
         inpaint_worker.current_task = None
         inpaint_parameterized = inpaint_engine != 'None'
         inpaint_image = None
