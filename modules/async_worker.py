@@ -1,6 +1,7 @@
 import threading
 import os
 from modules.patch import PatchSettings, patch_settings, patch_all
+from pathlib import Path
 
 patch_all()
 
@@ -302,16 +303,6 @@ def worker():
             # --- 下载 Inpaint 模型（如果需要） ---
             inpaint_head_model_path = None
             inpaint_patch_model_path = None
-            if inpaint_parameterized:
-                progressbar(async_task, 1, 'Downloading inpainter ...')
-                inpaint_head_model_path, inpaint_patch_model_path = modules.config.downloading_inpaint_models(inpaint_engine)
-                base_model_additional_loras += [(inpaint_patch_model_path, 1.0)]
-                print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
-                if refiner_model_name == 'None':
-                    use_synthetic_refiner = True
-                    refiner_switch = 0.5
-            else:
-                print(f'[Inpaint] Parameterized inpaint is disabled.')
 
             # --- 计算 switch ---
             switch = int(round(steps * refiner_switch))
@@ -415,6 +406,17 @@ def worker():
                     progressbar(async_task, 1, 'Downloading upscale models ...')
                     modules.config.downloading_upscale_model()
                     goals.append('inpaint')
+
+                    if inpaint_parameterized:
+                        progressbar(async_task, 1, 'Downloading inpainter ...')
+                        inpaint_head_model_path, inpaint_patch_model_path = modules.config.downloading_inpaint_models(inpaint_engine)
+                        base_model_additional_loras += [(inpaint_patch_model_path, 1.0)]
+                        print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
+                        if refiner_model_name == 'None':
+                            use_synthetic_refiner = True
+                            refiner_switch = 0.5
+                    else:
+                        print(f'[Inpaint] Parameterized inpaint is disabled.')
                 else:
                     pass
 
@@ -431,13 +433,27 @@ def worker():
                 progressbar(async_task, 1, 'Downloading control models ...')
                 if len(cn_tasks[flags.cn_canny]) > 0:
                     controlnet_canny_path = modules.config.downloading_controlnet_canny()
+                    controlnet_canny_path = str(Path(controlnet_canny_path).resolve())
                 if len(cn_tasks[flags.cn_cpds]) > 0:
                     controlnet_cpds_path = modules.config.downloading_controlnet_cpds()
+                    controlnet_cpds_path = str(Path(controlnet_cpds_path).resolve())
                 if len(cn_tasks[flags.cn_ip]) > 0:
                     clip_vision_path, ip_negative_path, ip_adapter_path = modules.config.downloading_ip_adapters('ip')
+                    ip_adapter_path = str(Path(ip_adapter_path).resolve())
+                    ip_adapter.load_ip_adapter(clip_vision_path, ip_negative_path, ip_adapter_path)
                 if len(cn_tasks[flags.cn_ip_face]) > 0:
                     clip_vision_path, ip_negative_path, ip_adapter_face_path = modules.config.downloading_ip_adapters('face')
+                    ip_adapter_face_path = str(Path(ip_adapter_face_path).resolve())
+                    ip_adapter.load_ip_adapter(clip_vision_path, ip_negative_path, ip_adapter_face_path)
                 progressbar(async_task, 1, 'Loading control models ...')
+
+            controlnet_paths = []
+            if controlnet_canny_path is not None:
+                controlnet_paths.append(controlnet_canny_path)
+            if controlnet_cpds_path is not None:
+                controlnet_paths.append(controlnet_cpds_path)
+            if controlnet_paths:
+                pipeline.refresh_controlnets(controlnet_paths)
 
         if not skip_prompt_processing:
             prompts = remove_empty_str([safe_str(p) for p in prompt.splitlines()], default='')
