@@ -3,6 +3,7 @@ import os
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
+import modules.flags as flags
 
 import gradio as gr
 from PIL import Image
@@ -26,25 +27,188 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
         loaded_parameter_dict = json.loads(raw_metadata)
     assert isinstance(loaded_parameter_dict, dict)
 
-    results = [len(loaded_parameter_dict) > 0, 1]
+    # 输出顺序必须与 webui.py 中 load_data_outputs 的顺序完全一致
+    # [0] advanced_checkbox
+    # [1] image_number
+    # [2] prompt
+    # [3] negative_prompt
+    # [4] steps_slider
+    # [5] overwrite_step
+    # [6] overwrite_switch
+    # [7] aspect_ratios_selection
+    # [8] overwrite_width
+    # [9] overwrite_height
+    # [10] guidance_scale
+    # [11] sharpness
+    # [12] adm_scaler_positive
+    # [13] adm_scaler_negative
+    # [14] adm_scaler_end
+    # [15] refiner_swap_method
+    # [16] adaptive_cfg
+    # [17] base_model
+    # [18] refiner_model
+    # [19] refiner_switch
+    # [20] sampler_name
+    # [21] scheduler_name
+    # [22] seed_random
+    # [23] image_seed
+    # [24] generate_button
+    # [25] load_parameter_button
+    # [26] freeu_enabled
+    # [27] freeu_b1
+    # [28] freeu_b2
+    # [29] freeu_s1
+    # [30] freeu_s2
+    # [31..] lora_combined (pairs)
 
-    get_str('prompt', 'Prompt', loaded_parameter_dict, results)
-    get_str('negative_prompt', 'Negative Prompt', loaded_parameter_dict, results)
-    get_str('performance', 'Performance', loaded_parameter_dict, results)
-    get_steps('steps', 'Steps', loaded_parameter_dict, results)
-    get_float('overwrite_switch', 'Overwrite Switch', loaded_parameter_dict, results)
-    get_resolution('resolution', 'Resolution', loaded_parameter_dict, results)
-    get_float('guidance_scale', 'Guidance Scale', loaded_parameter_dict, results)
-    get_float('sharpness', 'Sharpness', loaded_parameter_dict, results)
-    get_adm_guidance('adm_guidance', 'ADM Guidance', loaded_parameter_dict, results)
-    get_str('refiner_swap_method', 'Refiner Swap Method', loaded_parameter_dict, results)
-    get_float('adaptive_cfg', 'CFG Mimicking from TSNR', loaded_parameter_dict, results)
-    get_str('base_model', 'Base Model', loaded_parameter_dict, results)
-    get_str('refiner_model', 'Refiner Model', loaded_parameter_dict, results)
-    get_float('refiner_switch', 'Refiner Switch', loaded_parameter_dict, results)
-    get_str('sampler', 'Sampler', loaded_parameter_dict, results)
-    get_str('scheduler', 'Scheduler', loaded_parameter_dict, results)
-    get_seed('seed', 'Seed', loaded_parameter_dict, results)
+    results = []
+
+    # 辅助函数：获取值，若不存在则返回默认
+    def get_value(key, fallback=None, default=None):
+        v = loaded_parameter_dict.get(key, loaded_parameter_dict.get(fallback, default))
+        return v
+
+    # 1. advanced_checkbox (bool)
+    adv = get_value('advanced_checkbox', 'Advanced Checkbox', modules.config.default_advanced_checkbox)
+    results.append(adv if isinstance(adv, bool) else gr.update())
+
+    # 2. image_number (int)
+    img_num = get_value('image_number', 'Image Number', modules.config.default_image_number)
+    try:
+        results.append(int(img_num))
+    except:
+        results.append(gr.update())
+
+    # 3. prompt (str)
+    prompt = get_value('prompt', 'Prompt', '')
+    results.append(prompt if isinstance(prompt, str) else gr.update())
+
+    # 4. negative_prompt (str)
+    neg_prompt = get_value('negative_prompt', 'Negative Prompt', '')
+    results.append(neg_prompt if isinstance(neg_prompt, str) else gr.update())
+
+    # 5. steps_slider (int)  直接从 'steps' 读取
+    steps_val = get_value('steps', 'Steps', 25)
+    try:
+        steps_val = int(steps_val)
+        if steps_val < 1: steps_val = 1
+        if steps_val > 50: steps_val = 50
+        results.append(steps_val)
+    except:
+        results.append(gr.update())
+
+    # 6. overwrite_step (int)  默认 -1
+    overwrite_step = get_value('overwrite_step', 'Overwrite Step', -1)
+    try:
+        results.append(int(overwrite_step))
+    except:
+        results.append(gr.update())
+
+    # 7. overwrite_switch (float)
+    overwrite_switch = get_value('overwrite_switch', 'Overwrite Switch', -1.0)
+    try:
+        results.append(float(overwrite_switch))
+    except:
+        results.append(gr.update())
+
+    # 8-10. resolution -> aspect_ratios_selection, overwrite_width, overwrite_height
+    res = get_value('resolution', 'Resolution', None)
+    if res is not None:
+        try:
+            width, height = eval(res)
+            formatted = modules.config.add_ratio(f'{width}*{height}')
+            if formatted in modules.config.available_aspect_ratios:
+                results.append(formatted)
+                results.append(-1)
+                results.append(-1)
+            else:
+                results.append(gr.update())
+                results.append(width)
+                results.append(height)
+        except:
+            results.append(gr.update())
+            results.append(gr.update())
+            results.append(gr.update())
+    else:
+        results.append(gr.update())
+        results.append(gr.update())
+        results.append(gr.update())
+
+    # 11. guidance_scale (float)
+    guidance = get_value('guidance_scale', 'Guidance Scale', modules.config.default_cfg_scale)
+    try:
+        results.append(float(guidance))
+    except:
+        results.append(gr.update())
+
+    # 12. sharpness (float)
+    sharp = get_value('sharpness', 'Sharpness', modules.config.default_sample_sharpness)
+    try:
+        results.append(float(sharp))
+    except:
+        results.append(gr.update())
+
+    # 13-15. adm_guidance (3 floats)
+    adm = get_value('adm_guidance', 'ADM Guidance', None)
+    if adm is not None:
+        try:
+            p, n, e = eval(adm)
+            results.append(float(p))
+            results.append(float(n))
+            results.append(float(e))
+        except:
+            results.append(gr.update())
+            results.append(gr.update())
+            results.append(gr.update())
+    else:
+        results.append(gr.update())
+        results.append(gr.update())
+        results.append(gr.update())
+
+    # 16. refiner_swap_method (str)
+    refiner_swap = get_value('refiner_swap_method', 'Refiner Swap Method', flags.refiner_swap_method)
+    results.append(refiner_swap if isinstance(refiner_swap, str) else gr.update())
+
+    # 17. adaptive_cfg (float)
+    adaptive = get_value('adaptive_cfg', 'CFG Mimicking from TSNR', modules.config.default_cfg_tsnr)
+    try:
+        results.append(float(adaptive))
+    except:
+        results.append(gr.update())
+
+    # 18. base_model (str)
+    base = get_value('base_model', 'Base Model', '')
+    results.append(base if isinstance(base, str) else gr.update())
+
+    # 19. refiner_model (str)
+    refiner = get_value('refiner_model', 'Refiner Model', 'None')
+    results.append(refiner if isinstance(refiner, str) else gr.update())
+
+    # 20. refiner_switch (float)
+    refiner_sw = get_value('refiner_switch', 'Refiner Switch', modules.config.default_refiner_switch)
+    try:
+        results.append(float(refiner_sw))
+    except:
+        results.append(gr.update())
+
+    # 21. sampler_name (str)
+    sampler = get_value('sampler', 'Sampler', modules.config.default_sampler)
+    results.append(sampler if isinstance(sampler, str) else gr.update())
+
+    # 22. scheduler_name (str)
+    scheduler = get_value('scheduler', 'Scheduler', modules.config.default_scheduler)
+    results.append(scheduler if isinstance(scheduler, str) else gr.update())
+
+    # 23. seed_random (bool)
+    seed_random_val = get_value('seed_random', 'Randomize seed', True)
+    results.append(seed_random_val if isinstance(seed_random_val, bool) else gr.update())
+
+    # 24. image_seed (int)
+    seed_val = get_value('seed', 'Seed', 0)
+    try:
+        results.append(int(seed_val))
+    except:
+        results.append(gr.update())
 
     if is_generating:
         results.append(gr.update())
@@ -53,10 +217,45 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
 
     results.append(gr.update(visible=False))
 
-    get_freeu('freeu', 'FreeU', loaded_parameter_dict, results)
+    freeu_data = get_value('freeu', 'FreeU', None)
+    if freeu_data is not None:
+        try:
+            b1, b2, s1, s2 = eval(freeu_data)
+            results.append(True)
+            results.append(float(b1))
+            results.append(float(b2))
+            results.append(float(s1))
+            results.append(float(s2))
+        except:
+            results.append(False)
+            results.append(gr.update())
+            results.append(gr.update())
+            results.append(gr.update())
+            results.append(gr.update())
+    else:
+        results.append(False)
+        results.append(gr.update())
+        results.append(gr.update())
+        results.append(gr.update())
+        results.append(gr.update())
 
+    # 32-41. lora pairs (5 pairs)
     for i in range(lora_count):
-        get_lora(f'lora_combined_{i + 1}', f'LoRA {i + 1}', loaded_parameter_dict, results)
+        key = f'lora_combined_{i+1}'
+        fallback = f'LoRA {i+1}'
+        lora_val = get_value(key, fallback, None)
+        if lora_val is not None:
+            try:
+                n, w = lora_val.split(' : ')
+                w = float(w)
+                results.append(n)
+                results.append(w)
+            except:
+                results.append('None')
+                results.append(1.0)
+        else:
+            results.append('None')
+            results.append(1.0)
 
     return results
 
@@ -88,20 +287,6 @@ def get_float(key: str, fallback: str | None, source_dict: dict, results: list, 
         results.append(h)
     except:
         results.append(gr.update())
-
-
-def get_steps(key: str, fallback: str | None, source_dict: dict, results: list, default=None):
-    try:
-        h = source_dict.get(key, source_dict.get(fallback, default))
-        assert h is not None
-        h = int(h)
-        # if not in steps or in steps and performance is not the same
-        if h not in iter(Steps) or Steps(h).name.casefold() != source_dict.get('performance', '').replace(' ', '_').casefold():
-            results.append(h)
-            return
-        results.append(-1)
-    except:
-        results.append(-1)
 
 
 def get_resolution(key: str, fallback: str | None, source_dict: dict, results: list, default=None):

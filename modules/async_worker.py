@@ -1,3 +1,7 @@
+# This file is part of ReFocus.
+# Original work Copyright (c) 2023 lllyasviel (Fooocus) & 2024 ehristoforu (DeFooocus).
+# Modified and distributed under the terms of the GNU General Public License v3.0.
+
 import threading
 import os
 from modules.patch import PatchSettings, patch_settings, patch_all
@@ -144,7 +148,7 @@ def worker():
         prompt = args.pop() or ''
         negative_prompt = args.pop() or ''
         translate_prompts = args.pop()
-        performance_selection = Performance(args.pop())
+        steps = args.pop()
         aspect_ratios_selection = args.pop()
         image_number = args.pop()
         output_format = args.pop()
@@ -222,26 +226,28 @@ def worker():
             print(f'Refiner disabled because base model and refiner are same.')
             refiner_model_name = 'None'
 
-        steps = performance_selection.steps()
+        if overwrite_step > 0:
+            steps = overwrite_step
+            print(f'[Parameters] Forced overwrite step to {steps}')
 
-        if performance_selection == Performance.EXTREME_SPEED:
-            print('Enter LCM mode.')
-            progressbar(async_task, 1, 'Downloading LCM components ...')
-            loras += [(modules.config.downloading_sdxl_lcm_lora(), 1.0)]
+        if steps <= 10:
+            print('Auto-switching to LCM mode (1-10 steps).')
+            progressbar(async_task, 1, 'Auto-switching to LCM mode (1-10 steps) ...')
 
-            if refiner_model_name != 'None':
-                print(f'Refiner disabled in LCM mode.')
+            lcm_lora_path = modules.config.downloading_sdxl_lcm_lora()
 
-            refiner_model_name = 'None'
+            base_model_additional_loras.append((lcm_lora_path, 1.0))
+
             sampler_name = 'lcm'
             scheduler_name = 'lcm'
-            sharpness = 0.0
             guidance_scale = 1.0
+            sharpness = 0.0
             adaptive_cfg = 1.0
-            refiner_switch = 1.0
             adm_scaler_positive = 1.0
             adm_scaler_negative = 1.0
             adm_scaler_end = 0.0
+        else:
+            pass
 
         if translate_prompts:
             from modules.translator import translate2en
@@ -274,6 +280,13 @@ def worker():
 
         width, height = aspect_ratios_selection.replace('×', ' ').split(' ')[:2]
         width, height = int(width), int(height)
+
+        if overwrite_width > 0:
+            width = overwrite_width
+            print(f'[Parameters] Forced overwrite width to {width}')
+        if overwrite_height > 0:
+            height = overwrite_height
+            print(f'[Parameters] Forced overwrite height to {height}')
 
         skip_prompt_processing = False
 
@@ -320,11 +333,7 @@ def worker():
                     if 'fast' in uov_method:
                         skip_prompt_processing = True
                     else:
-                        steps = performance_selection.steps_uov()
-                        # 重新计算 switch 因为 steps 已变
-                        switch = int(round(steps * refiner_switch))
-                        if overwrite_switch > 0:
-                            switch = overwrite_switch
+                        pass
 
                     progressbar(async_task, 1, 'Downloading upscale models ...')
                     modules.config.downloading_upscale_model()
@@ -777,9 +786,10 @@ def worker():
 
         def callback(step, x0, x, total_steps, y):
             done_steps = current_task_id * steps + step
-            async_task.yields.append(['preview', (
-                int(15.0 + 85.0 * float(done_steps) / float(all_steps)),
-                f'Sampling Image {current_task_id + 1}/{image_number}, Step {step + 1}/{total_steps} ...', y)])
+            if step % 3 == 0 or step == total_steps - 1:
+                async_task.yields.append(['preview', (
+                    int(15.0 + 85.0 * float(done_steps) / float(all_steps)),
+                    f'Sampling Image {current_task_id + 1}/{image_number}, Step {step + 1}/{total_steps} ...', y)])
 
         for current_task_id, task in enumerate(tasks):
             execution_start_time = time.perf_counter()
@@ -828,7 +838,6 @@ def worker():
                 for x in imgs:
                     d = [('Prompt', 'prompt', task['log_positive_prompt']),
                          ('Negative Prompt', 'negative_prompt', task['log_negative_prompt']),
-                         ('Performance', 'performance', performance_selection.value),
                          ('Steps', 'steps', steps),
                          ('Resolution', 'resolution', str((width, height))),
                          ('Guidance Scale', 'guidance_scale', guidance_scale),

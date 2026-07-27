@@ -358,6 +358,11 @@ available_aspect_ratios = get_config_item_or_set_default(
     ],
     validator=lambda x: isinstance(x, list) and all('*' in v for v in x) and len(x) > 1
 )
+default_steps = get_config_item_or_set_default(
+    key='default_steps',
+    default_value=25,
+    validator=lambda x: isinstance(x, int) and 1 <= x <= 50
+)
 default_aspect_ratio = get_config_item_or_set_default(
     key='default_aspect_ratio',
     default_value='1152*896' if '1152*896' in available_aspect_ratios else available_aspect_ratios[0],

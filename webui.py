@@ -443,15 +443,25 @@ with shared.gradio_root:
         with gr.Column(scale=1, visible=modules.config.default_advanced_checkbox) as advanced_column:
             with gr.Tab(label='Settings'):
                 with gr.Row():
-                    performance_selection = gr.Radio(label='Performance',
-                                                    choices=modules.flags.performance_selections,
-                                                    value=modules.config.default_performance,
-                                                    elem_classes='performance_selections')
-                    if not args_manager.args.disable_preset_selection:
-                        preset_selection = gr.Dropdown(label='Preset',
-                                                    choices=modules.config.available_presets,
-                                                    value=args_manager.args.preset if args_manager.args.preset else "initial",
-                                                    interactive=True)
+                    with gr.Row():
+                        steps_slider = gr.Slider(
+                            minimum=1, maximum=50, step=1,
+                            value=modules.config.default_steps if hasattr(modules.config, 'default_steps') else 25,
+                            label="Steps",
+                            elem_id="steps_slider"
+                        )
+                    with gr.Row():
+                        preset_45 = gr.Button("45 (Quality)", size="sm")
+                        preset_25 = gr.Button("25 (Speed)", size="sm")
+                        preset_10 = gr.Button("10 (Extreme)", size="sm")
+                        if not args_manager.args.disable_preset_selection:
+                            preset_selection = gr.Dropdown(label='Preset',
+                                                        choices=modules.config.available_presets,
+                                                        value=args_manager.args.preset if args_manager.args.preset else "initial",
+                                                        interactive=True)
+                    preset_45.click(lambda: gr.update(value=45), outputs=steps_slider)
+                    preset_25.click(lambda: gr.update(value=25), outputs=steps_slider)
+                    preset_10.click(lambda: gr.update(value=10), outputs=steps_slider)
 
                 aspect_ratios_selection = gr.Radio(label='Aspect Ratios', choices=modules.config.available_aspect_ratios,
                                                    value=modules.config.default_aspect_ratio, info='width × height',
@@ -718,7 +728,7 @@ with shared.gradio_root:
         state_is_generating = gr.State(False)
 
         load_data_outputs = [advanced_checkbox, image_number, prompt, negative_prompt, 
-                             performance_selection, overwrite_step, overwrite_switch, aspect_ratios_selection,
+                             steps_slider, overwrite_step, overwrite_switch, aspect_ratios_selection,
                              overwrite_width, overwrite_height, guidance_scale, sharpness, adm_scaler_positive,
                              adm_scaler_negative, adm_scaler_end, refiner_swap_method, adaptive_cfg, base_model,
                              refiner_model, refiner_switch, sampler_name, scheduler_name, seed_random, image_seed,
@@ -749,17 +759,6 @@ with shared.gradio_root:
                 queue=False,
                 show_progress=True
             )
-
-
-        performance_selection.change(lambda x: [gr.update(interactive=x != 'Extreme Speed')] * 11 +
-                                               [gr.update(visible=x != 'Extreme Speed')] * 1 +
-                                               [gr.update(interactive=x != 'Extreme Speed', value=x == 'Extreme Speed', )] * 1,
-                                     inputs=performance_selection,
-                                     outputs=[
-                                         guidance_scale, sharpness, adm_scaler_end, adm_scaler_positive,
-                                         adm_scaler_negative, refiner_switch, refiner_model, sampler_name,
-                                         scheduler_name, adaptive_cfg, refiner_swap_method, negative_prompt, disable_intermediate_results
-                                     ], queue=False, show_progress=False)
 
         output_format.input(lambda x: gr.update(output_format=x), inputs=output_format)
 
@@ -827,7 +826,7 @@ with shared.gradio_root:
         ctrls = [currentTask, generate_image_grid]
         ctrls += [
             prompt, negative_prompt, translate_prompts, 
-            performance_selection, aspect_ratios_selection, image_number, output_format, image_seed, sharpness, guidance_scale
+            steps_slider, aspect_ratios_selection, image_number, output_format, image_seed, sharpness, guidance_scale
         ]
 
         ctrls += [base_model, refiner_model, refiner_switch] + lora_ctrls

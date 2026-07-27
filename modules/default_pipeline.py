@@ -1,3 +1,7 @@
+# This file is part of ReFocus.
+# Original work Copyright (c) 2023 lllyasviel (Fooocus) & 2024 ehristoforu (DeFooocus).
+# Modified and distributed under the terms of the GNU General Public License v3.0.
+
 import modules.core as core
 import os
 import torch
