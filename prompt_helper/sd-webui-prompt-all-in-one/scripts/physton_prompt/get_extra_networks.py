@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 
-from modules import script_callbacks, extra_networks, prompt_parser, shared, ui_extra_networks
+from ph_modules import script_callbacks, extra_networks, prompt_parser, shared, ui_extra_networks
 import json
 import os
 import copy

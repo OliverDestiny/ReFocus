@@ -235,7 +235,11 @@ with shared.gradio_root:
             rembg_button.click(rembg_callback, inputs=rembg_input, outputs=rembg_output, show_progress="full")
 
             with gr.Tab("Prompt Helper"):
-                gr.HTML(f'<iframe src="http://127.0.0.1:{PROMPT_HELPER_PORT}/?__theme=dark" width="100%" height="800px" frameborder="0"></iframe>')
+                gr.HTML(
+                    '<iframe src="/prompt-helper/?__theme=dark" '
+                    'width="100%" height="800px" frameborder="0"></iframe>'
+                )
+
             with gr.Row(elem_classes='type_row'):
                 with gr.Column(scale=17):
                     prompt = gr.Textbox(show_label=False, placeholder="Type prompt here or paste parameters.", elem_id='positive_prompt',
@@ -925,16 +929,3 @@ with shared.gradio_root:
             show_progress=True,
             queue=True
         )
-
-shared.gradio_root.launch(
-    inbrowser=args_manager.args.in_browser,
-    server_name=args_manager.args.listen if args_manager.args.listen else None,
-    server_port=args_manager.args.port,
-    share=args_manager.args.share,
-    favicon_path="assets/favicon.png",
-    auth=None,
-    blocked_paths=[constants.AUTH_FILENAME],
-    allowed_paths=[modules.config.path_outputs],
-    css=modules.html.css,
-    head=get_custom_head()
-)

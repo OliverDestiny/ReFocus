@@ -1,5 +1,5 @@
-from modules import script_callbacks, extra_networks, prompt_parser, sd_models
-from modules.sd_hijack import model_hijack
+from ph_modules import script_callbacks, extra_networks, prompt_parser, sd_models
+from ph_modules.sd_hijack import model_hijack
 from functools import partial, reduce
 
 
@@ -17,7 +17,7 @@ def get_token_counter(text, steps):
         prompt_schedules = [[[steps, text]]]
 
     try:
-        from modules_forge import forge_version
+        from ph_modules_forge import forge_version
         forge = True
 
     except:

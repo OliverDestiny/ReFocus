@@ -2,7 +2,7 @@ import gradio as gr
 import os
 import sys
 from pathlib import Path
-from modules import script_callbacks, extra_networks, prompt_parser
+from ph_modules import script_callbacks, extra_networks, prompt_parser
 from fastapi import FastAPI, Body, Request, Response
 from fastapi.responses import FileResponse
 from scripts.physton_prompt.storage import Storage
@@ -22,7 +22,7 @@ from scripts.physton_prompt.mbart50 import initialize as mbart50_initialize, tra
 from scripts.physton_prompt.get_group_tags import get_group_tags
 
 try:
-    from modules.shared import cmd_opts
+    from ph_modules.shared import cmd_opts
 
     if cmd_opts.data_dir:
         extension_dir = os.path.dirname(os.path.abspath(__file__)) + '/../'
