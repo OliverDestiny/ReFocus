@@ -7,7 +7,7 @@
     "default_sample_sharpness": 2.0,
     "default_sampler": "euler",
     "default_scheduler": "karras",
-    "default_steps": "25",
+    "default_steps": 25,
     "default_prompt": "",
     "default_prompt_negative": "company name,signature,company mark,watermark,text,bad hands,extra fingers,missing fingers,worst quality,bad quality,blurred,wrong structure,wrong hands,overly bright,overexposure,oversaturation,unnatural color,censorship,censored,bad color,worst quality,extra arms,extra legs,",
     "default_aspect_ratio": "1024*1536",
