@@ -455,7 +455,7 @@ possible_preset_keys = {
     "default_sampler": "sampler",
     "default_scheduler": "scheduler",
     "default_overwrite_step": "steps",
-    "default_performance": "performance",
+    "default_steps": "steps",
     "default_prompt": "prompt",
     "default_prompt_negative": "negative_prompt",
     "default_aspect_ratio": "resolution",
