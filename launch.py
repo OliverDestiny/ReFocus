@@ -56,7 +56,7 @@ prompt_helper_app = create_prompt_helper_app()
 app.mount("/prompt-helper", prompt_helper_app)
 
 # -----------------------------
-# 4. Fooocus UI
+# 4. ReFocus UI
 # -----------------------------
 mount_gradio_app(
     app,
@@ -73,7 +73,7 @@ mount_gradio_app(
 # -----------------------------
 # 5. Run server
 # -----------------------------
-print(f"UI at http://localhost:{port}/")
+print(f"ReFocus UI at http://localhost:{port}/")
 
 import webbrowser
 webbrowser.open(f"http://{host}:{port}/")

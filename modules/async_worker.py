@@ -43,7 +43,7 @@ def worker():
     import modules.constants as constants
     import extras.ip_adapter as ip_adapter
     import extras.face_crop
-    import fooocus_version
+    import ReFocus_version
     import args_manager
 
     from modules.censor import censor_batch
@@ -74,7 +74,7 @@ def worker():
         print(e)
 
     def progressbar(async_task, number, text):
-        print(f'[Fooocus] {text}')
+        print(f'[ReFocus] {text}')
         async_task.yields.append(['preview', (number, text, None)])
 
     def yield_result(async_task, imgs, black_out_nsfw, do_not_show_finished_images=False, progressbar_index=13):
@@ -876,7 +876,7 @@ def worker():
                         if n != 'None':
                             d.append((f'LoRA {li + 1}', f'lora_combined_{li + 1}', f'{n} : {w}'))
 
-                    d.append(('Version', 'version', 'Fooocus v' + fooocus_version.version))
+                    d.append(('Version', 'version', 'ReFocus v' + ReFocus_version.version))
                     img_paths.append(log(x, d, metadata_parser, output_format))
 
                 yield_result(async_task, img_paths, black_out_nsfw, do_not_show_finished_images=len(tasks) == 1

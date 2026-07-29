@@ -32,8 +32,10 @@ def load_model_weights(model, sd):
         if x not in unexpected_keys:
             w = sd.pop(x)
             del w
-    if len(m) > 0:
-        print("extra", m)
+
+    # Using these when DeBug or needed, here comment it for clear console output
+    # if len(m) > 0:
+        # print("extra", m)
     return model
 
 def load_clip_weights(model, sd):
@@ -475,9 +477,10 @@ def load_checkpoint_guess_config(ckpt_path, output_vae=True, output_clip=True, o
             sd = model_config.process_clip_state_dict(sd)
             load_model_weights(w, sd)
 
-    left_over = sd.keys()
-    if len(left_over) > 0:
-        print("left over keys:", left_over)
+    # Using these when DeBug or needed, here comment it for clear console output
+    # left_over = sd.keys()
+    # if len(left_over) > 0:
+        # print("left over keys:", left_over)
 
     if output_model:
         model_patcher = ldm_patched.modules.model_patcher.ModelPatcher(model, load_device=load_device, offload_device=model_management.unet_offload_device(), current_device=inital_load_device)
@@ -518,9 +521,11 @@ def load_unet_state_dict(sd): #load unet in diffusers format
     model = model_config.get_model(new_sd, "")
     model = model.to(offload_device)
     model.load_model_weights(new_sd, "")
-    left_over = sd.keys()
-    if len(left_over) > 0:
-        print("left over keys in unet:", left_over)
+
+    # Using these when DeBug or needed, here comment it for clear console output
+    # left_over = sd.keys()
+    # if len(left_over) > 0:
+        # print("left over keys in unet:", left_over)
     return ldm_patched.modules.model_patcher.ModelPatcher(model, load_device=load_device, offload_device=offload_device)
 
 def load_unet(unet_path):
