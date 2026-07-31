@@ -595,6 +595,40 @@ def worker():
             height = H * 8
             print(f'Final resolution is {str((height, width))}.')
 
+        if 'vary' in goals:
+            if 'subtle' in uov_method:
+                denoising_strength = 0.5
+            if 'strong' in uov_method:
+                denoising_strength = 0.85
+            if overwrite_vary_strength > 0:
+                denoising_strength = overwrite_vary_strength
+
+            shape_ceil = get_image_shape_ceil(uov_input_image)
+            if shape_ceil < 1024:
+                print(f'[Vary] Image is resized because it is too small.')
+                shape_ceil = 1024
+            elif shape_ceil > 2048:
+                print(f'[Vary] Image is resized because it is too big.')
+                shape_ceil = 2048
+
+            uov_input_image = set_image_shape_ceil(uov_input_image, shape_ceil)
+
+            initial_pixels = core.numpy_to_pytorch(uov_input_image)
+            progressbar(async_task, 13, 'VAE encoding ...')
+
+            candidate_vae, _ = pipeline.get_candidate_vae(
+                steps=steps,
+                switch=switch,
+                denoise=denoising_strength,
+                refiner_swap_method=refiner_swap_method
+            )
+
+            initial_latent = core.encode_vae(vae=candidate_vae, pixels=initial_pixels)
+            B, C, H, W = initial_latent['samples'].shape
+            width = W * 8
+            height = H * 8
+            print(f'Final resolution is {str((height, width))}.')
+
         if 'inpaint' in goals:
             if len(outpaint_selections) > 0:
                 H, W, C = inpaint_image.shape
@@ -740,6 +774,9 @@ def worker():
 
             if len(all_ip_tasks) > 0:
                 pipeline.final_unet = ip_adapter.patch_model(pipeline.final_unet, all_ip_tasks)
+
+        if len(goals) > 0:
+            progressbar(async_task, 13, 'Image processing ...')
 
         if freeu_enabled:
             print(f'FreeU is enabled!')
