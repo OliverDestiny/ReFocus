@@ -161,7 +161,12 @@ def worker():
         loras = [[str(args.pop()), float(args.pop())] for _ in range(lora_count)]
         input_image_checkbox = args.pop()
         current_tab = args.pop()
-        uov_method = args.pop()
+        uov_mode = args.pop()          # 'Disabled' | 'Vary' | 'Upscale'
+        uov_vary_mode = args.pop()     # 'Subtle' | 'Strong'
+        uov_scale = args.pop()         # float, 0.25 ~ 4.0
+        uov_fast = args.pop()          # bool
+        uov_ignore_prompt = args.pop() # bool
+        uov_denoise = args.pop()       # float, 0.0 ~ 1.0
         uov_input_image = args.pop()
         outpaint_selections = args.pop()
         inpaint_input_image = args.pop()
@@ -219,8 +224,6 @@ def worker():
 
         outpaint_selections = [o.lower() for o in outpaint_selections]
         base_model_additional_loras = []
-        
-        uov_method = uov_method.lower()
 
         if base_model_name == refiner_model_name:
             print(f'Refiner disabled because base model and refiner are same.')
@@ -324,19 +327,17 @@ def worker():
 
             if (current_tab == 'uov' or (
                     current_tab == 'ip' and mixing_image_prompt_and_vary_upscale)) \
-                    and uov_method != flags.disabled and uov_input_image is not None:
-                uov_input_image = HWC3(uov_input_image)
-                if 'vary' in uov_method:
+                    and uov_mode != flags.UOV_MODE_DISABLED and uov_input_image is not None:
+                if uov_mode == flags.UOV_MODE_VARY:
                     goals.append('vary')
-                elif 'upscale' in uov_method:
+                    skip_prompt_processing = uov_ignore_prompt
+                elif uov_mode == flags.UOV_MODE_UPSCALE:
                     goals.append('upscale')
-                    if 'fast' in uov_method:
-                        skip_prompt_processing = True
-                    else:
-                        pass
-
+                    skip_prompt_processing = uov_ignore_prompt or uov_fast
                     progressbar(async_task, 1, 'Downloading upscale models ...')
                     modules.config.downloading_upscale_model()
+                else:
+                    pass
 
             if (current_tab == 'inpaint' or (current_tab == 'ip' and mixing_image_prompt_and_inpaint)):
                 inpaint_image = None
@@ -536,26 +537,18 @@ def worker():
             progressbar(async_task, 13, f'Upscaling image from {str((H, W))} ...')
             uov_input_image = perform_upscale(uov_input_image)
             print(f'Image upscaled.')
+            f = uov_scale
 
-            if '1.5x' in uov_method:
-                f = 1.5
-            elif '2x' in uov_method:
-                f = 2.0
-            else:
-                f = 1.0
-
-            shape_ceil = get_shape_ceil(H * f, W * f)
-
-            if shape_ceil < 1024:
-                print(f'[Upscale] Image is resized because it is too small.')
-                uov_input_image = set_image_shape_ceil(uov_input_image, 1024)
-                shape_ceil = 1024
-            else:
-                uov_input_image = resample_image(uov_input_image, width=W * f, height=H * f)
+            target_width = int(round(W * f))
+            target_height = int(round(H * f))
+            target_width = math.ceil(target_width / 64) * 64
+            target_height = math.ceil(target_height / 64) * 64
+            shape_ceil = get_shape_ceil(target_height, target_width)
+            uov_input_image = resample_image(uov_input_image, width=target_width, height=target_height)
 
             image_is_super_large = shape_ceil > 2800
 
-            if 'fast' in uov_method:
+            if uov_fast:
                 direct_return = True
             elif image_is_super_large:
                 print('Image is too large. Directly returned the SR image. '
@@ -566,14 +559,13 @@ def worker():
                 direct_return = False
 
             if direct_return:
-                d = [('Upscale (Fast)', '2x')]
+                d = [('Upscale (Fast)', f'{f}x')]
                 uov_input_image_path = log(uov_input_image, d, output_format=output_format)
                 yield_result(async_task, uov_input_image_path, black_out_nsfw, do_not_show_finished_images=True)
                 return
 
-            tiled = True
-            denoising_strength = 0.382
-
+            tiled = not uov_fast
+            denoising_strength = uov_denoise
             if overwrite_upscale_strength > 0:
                 denoising_strength = overwrite_upscale_strength
 
@@ -596,10 +588,7 @@ def worker():
             print(f'Final resolution is {str((height, width))}.')
 
         if 'vary' in goals:
-            if 'subtle' in uov_method:
-                denoising_strength = 0.5
-            if 'strong' in uov_method:
-                denoising_strength = 0.85
+            denoising_strength = uov_denoise
             if overwrite_vary_strength > 0:
                 denoising_strength = overwrite_vary_strength
 

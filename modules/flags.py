@@ -2,15 +2,13 @@ from enum import IntEnum, Enum
 
 disabled = 'Disabled'
 enabled = 'Enabled'
-subtle_variation = 'Vary (Subtle)'
-strong_variation = 'Vary (Strong)'
-upscale_15 = 'Upscale (1.5x)'
-upscale_2 = 'Upscale (2x)'
-upscale_fast = 'Upscale (Fast 2x)'
 
-uov_list = [
-    disabled, subtle_variation, strong_variation, upscale_15, upscale_2, upscale_fast
-]
+UOV_MODE_DISABLED = 'Disabled'
+UOV_MODE_VARY = 'Vary'
+UOV_MODE_UPSCALE = 'Upscale'
+
+UOV_VARY_SUBTLE = 'Subtle'
+UOV_VARY_STRONG = 'Strong'
 
 CIVITAI_NO_KARRAS = ["euler", "euler_ancestral", "heun", "dpm_fast", "dpm_adaptive", "ddim", "uni_pc"]
 
@@ -107,8 +105,7 @@ controlnet_image_count = 4
 class Steps(IntEnum):
     QUALITY = 45
     SPEED = 25
-    EXTREME_SPEED = 10 # original was 8
-    # added choices
+    EXTREME_SPEED = 10
     SPEED_A = 15
     SPEED_B = 20
     NORMAL_A = 30
@@ -121,7 +118,6 @@ class StepsUOV(IntEnum):
     QUALITY = 36
     SPEED = 18
     EXTREME_SPEED = 8
-    # added choices
     SPEED_A = 12
     SPEED_B = 16
     NORMAL_A = 24
@@ -134,7 +130,6 @@ class Performance(Enum):
     QUALITY = 'Quality'
     SPEED = 'Speed'
     EXTREME_SPEED = 'Extreme Speed'
-    # added choices
     SPEED_A = 'SPEED_A'
     SPEED_B = 'SPEED_B'
     NORMAL_A = 'NORMAL_A'

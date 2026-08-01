@@ -282,7 +282,130 @@ with shared.gradio_root:
                             with gr.Column():
                                 uov_input_image = gr.Image(label='Drag above image to here', sources=['upload'], type='numpy')
                             with gr.Column():
-                                uov_method = gr.Radio(label='Upscale or Variation:', choices=flags.uov_list, value=flags.disabled)
+                                # ---- Mode Radio ----
+                                uov_mode = gr.Radio(label='Mode:', choices=[flags.UOV_MODE_DISABLED, flags.UOV_MODE_VARY, flags.UOV_MODE_UPSCALE],value=flags.UOV_MODE_DISABLED, interactive=True)
+                                uov_vary_mode = gr.Dropdown(label='Vary Mode:',choices=[flags.UOV_VARY_SUBTLE,flags.UOV_VARY_STRONG,'Custom'],value=flags.UOV_VARY_SUBTLE,interactive=True,visible=False)
+                                uov_scale = gr.Slider(label='Scale:',minimum=0.25,maximum=4.0,step=0.05,value=2.0,interactive=True,visible=False)
+
+                                with gr.Row(visible=False) as uov_scale_buttons_row:
+                                    btn_025x = gr.Button('0.25x', size='sm')
+                                    btn_05x = gr.Button('0.5x', size='sm')
+                                    btn_15x = gr.Button('1.5x', size='sm')
+                                    btn_2x = gr.Button('2x', size='sm')
+                                    btn_3x = gr.Button('3x', size='sm')
+                                    btn_4x = gr.Button('4x', size='sm')
+
+                                uov_fast = gr.Checkbox(label='Fast Mode (ESRGAN only, no diffusion)',value=False,interactive=True,visible=False)
+                                uov_ignore_prompt = gr.Checkbox(label='Ignore Prompt',value=False,interactive=True,visible=False)
+                                uov_advanced = gr.Checkbox(label='Advanced', value=False, visible=False)
+                                uov_denoise_state = gr.State(value=0.5)
+                                uov_denoise_vary = gr.Slider( label='Denoise Strength', minimum=0.0, maximum=1.0, step=0.01, value=0.5, visible=False )
+                                uov_denoise_upscale = gr.Slider( label='Denoise Strength', minimum=0.0, maximum=1.0, step=0.01, value=0.382, visible=False )
+
+                                ignore_prompt_cache = gr.State(False)
+                                def on_mode_change(mode, vary_mode, advanced_checked):
+                                    is_vary = (mode == flags.UOV_MODE_VARY)
+                                    is_upscale = (mode == flags.UOV_MODE_UPSCALE)
+                                    is_active = (mode != flags.UOV_MODE_DISABLED)
+
+                                    is_vary_custom = is_vary and (vary_mode == 'Custom')
+                                    is_upscale_advanced = is_upscale and advanced_checked
+                                    if mode == flags.UOV_MODE_VARY:
+                                        if vary_mode == flags.UOV_VARY_SUBTLE:
+                                            denoise_value = 0.50
+                                        elif vary_mode == flags.UOV_VARY_STRONG:
+                                            denoise_value = 0.85
+                                        else:  # Custom
+                                            denoise_value = 0.50
+                                    elif mode == flags.UOV_MODE_UPSCALE:
+                                        denoise_value = 0.382
+                                    else:  # Disabled
+                                        denoise_value = 0.5
+                                    
+                                    return [
+                                        gr.update(visible=is_vary),                     # uov_vary_mode
+                                        gr.update(visible=is_upscale),                  # uov_scale
+                                        gr.update(visible=is_upscale),                  # uov_scale_buttons_row
+                                        gr.update(visible=is_upscale),                  # uov_fast
+                                        gr.update(visible=is_active),                   # uov_ignore_prompt
+                                        gr.update(visible=is_upscale),                  # uov_advanced
+                                        gr.update(visible=is_vary_custom, value=denoise_value),  # uov_denoise_vary
+                                        gr.update(visible=is_upscale_advanced, value=denoise_value),  # uov_denoise_upscale
+                                        denoise_value,                                  # uov_denoise_state
+                                    ]
+                                uov_mode.change(on_mode_change, inputs=[uov_mode, uov_vary_mode, uov_advanced], outputs=[uov_vary_mode, uov_scale, uov_scale_buttons_row, uov_fast, uov_ignore_prompt, uov_advanced, uov_denoise_vary, uov_denoise_upscale, uov_denoise_state])
+
+                                def on_vary_mode_change(vary_mode, current_mode):
+                                    is_vary = (current_mode == flags.UOV_MODE_VARY)
+                                    if not is_vary:
+                                        return [gr.update(), gr.update(), gr.update()]
+                                    
+                                    if vary_mode == flags.UOV_VARY_SUBTLE:
+                                        return [
+                                            gr.update(value=0.50, visible=False),
+                                            gr.update(value=0.50),
+                                            gr.update()
+                                        ]
+                                    elif vary_mode == flags.UOV_VARY_STRONG:
+                                        return [
+                                            gr.update(value=0.85, visible=False),
+                                            gr.update(value=0.85),
+                                            gr.update()
+                                        ]
+                                    else:  # Custom
+                                        return [
+                                            gr.update(value=0.50, visible=True),
+                                            gr.update(value=0.50),
+                                            gr.update()
+                                        ]
+                                uov_vary_mode.change(on_vary_mode_change, inputs=[uov_vary_mode, uov_mode], outputs=[uov_denoise_vary, uov_denoise_state, uov_denoise_upscale])
+
+                                def on_advanced_change(advanced_checked):
+                                    if advanced_checked:
+                                        return [
+                                            gr.update(value=0.382, visible=True),  # uov_denoise_upscale
+                                            0.382                                  # uov_denoise_state
+                                        ]
+                                    else:
+                                        return [
+                                            gr.update(visible=False),  # uov_denoise_upscale
+                                            gr.update()                # uov_denoise_state（保持当前值，不影响）
+                                        ]
+
+                                uov_advanced.change(
+                                    on_advanced_change,
+                                    inputs=[uov_advanced],
+                                    outputs=[uov_denoise_upscale, uov_denoise_state]
+                                )
+                                # Vary Custom Slider 值变化时更新 State
+                                uov_denoise_vary.input(
+                                    lambda val: gr.update(value=val),
+                                    inputs=[uov_denoise_vary],
+                                    outputs=[uov_denoise_state]
+                                )
+
+                                # Upscale Slider 值变化时更新 State
+                                uov_denoise_upscale.input(
+                                    lambda val: gr.update(value=val),
+                                    inputs=[uov_denoise_upscale],
+                                    outputs=[uov_denoise_state]
+                                )
+
+                                def on_fast_change(fast_checked, current_ignore, cached_ignore):
+                                    if fast_checked:
+                                        return (gr.update(value=True, interactive=False),current_ignore)
+                                    else:
+                                        
+                                        return (gr.update(value=cached_ignore, interactive=True),cached_ignore)
+                                uov_fast.change(on_fast_change,inputs=[uov_fast, uov_ignore_prompt, ignore_prompt_cache],outputs=[uov_ignore_prompt, ignore_prompt_cache])
+
+                                btn_025x.click(lambda: gr.update(value=0.25), outputs=[uov_scale])
+                                btn_05x.click(lambda: gr.update(value=0.5), outputs=[uov_scale])
+                                btn_15x.click(lambda: gr.update(value=1.5), outputs=[uov_scale])
+                                btn_2x.click(lambda: gr.update(value=2.0), outputs=[uov_scale])
+                                btn_3x.click(lambda: gr.update(value=3.0), outputs=[uov_scale])
+                                btn_4x.click(lambda: gr.update(value=4.0), outputs=[uov_scale])
+
                                 gr.HTML('<a href="https://github.com/lllyasviel/Fooocus/discussions/390" target="_blank">\U0001F4D4 Document</a>')
                     with gr.TabItem(label='Image Prompt') as ip_tab:
                         with gr.Row():
@@ -835,8 +958,7 @@ with shared.gradio_root:
 
         ctrls += [base_model, refiner_model, refiner_switch] + lora_ctrls
         ctrls += [input_image_checkbox, current_tab]
-        ctrls += [uov_method, uov_input_image]
-        # ========== 替换：将 inpaint_input_image 改为 inpaint_data_legacy ==========
+        ctrls += [uov_mode, uov_vary_mode, uov_scale, uov_fast, uov_ignore_prompt, uov_denoise_state, uov_input_image]
         ctrls += [outpaint_selections, inpaint_data_legacy, inpaint_additional_prompt, inpaint_mask_image]
         ctrls += [disable_preview, disable_intermediate_results, black_out_nsfw]
         ctrls += [adm_scaler_positive, adm_scaler_negative, adm_scaler_end, adaptive_cfg]
