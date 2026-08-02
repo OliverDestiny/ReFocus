@@ -550,18 +550,35 @@ def worker():
 
             if uov_fast:
                 direct_return = True
+                fast_mode_reason = 'manual'
             elif image_is_super_large:
                 print('Image is too large. Directly returned the SR image. '
                       'Usually directly return SR image at 4K resolution '
                       'yields better results than SDXL diffusion.')
                 direct_return = True
+                fast_mode_reason = 'auto_oversize'
             else:
                 direct_return = False
+                fast_mode_reason = None
 
             if direct_return:
+                if fast_mode_reason == 'auto_oversize':
+                    async_task.yields.append(['preview', (13, 'Image too large, auto-switch to Fast Mode...', None)])
+
                 d = [('Upscale (Fast)', f'{f}x')]
                 uov_input_image_path = log(uov_input_image, d, output_format=output_format)
-                yield_result(async_task, uov_input_image_path, black_out_nsfw, do_not_show_finished_images=True)
+
+                if fast_mode_reason == 'manual':
+                    progress_text = 'Upscale (Fast) completed'
+                else:
+                    progress_text = 'Auto Fast Mode completed'
+                async_task.yields.append(['preview', (100, progress_text, None)])
+
+                async_task.results = [uov_input_image_path]
+                async_task.yields.append(['results', async_task.results])
+
+                async_task.yields.append(['finish', async_task.results])
+                async_task.processing = False
                 return
 
             tiled = not uov_fast
@@ -927,25 +944,33 @@ def worker():
         if len(async_tasks) > 0:
             task = async_tasks.pop(0)
 
-            # local modified for : pop from empty list error
             if not task.args:  # 防止空任务导致pop报错
                 print("[Warning] async_worker got empty task.args, skip this task.")
                 continue
-            # local modified for : pop from empty list error
-
-            # local modified, change place : original place
-            #                                generate_image_grid = task.args.pop(0)
 
             try:
-                generate_image_grid = task.args.pop(0) # local modified, changed place : final place
+                generate_image_grid = task.args.pop(0)
                 handler(task)
                 if generate_image_grid:
                     build_image_wall(task)
                 task.yields.append(['finish', task.results])
                 pipeline.prepare_text_encoder(async_call=True)
-            except:
+            except Exception as e:
                 traceback.print_exc()
-                task.yields.append(['finish', task.results])
+                
+                error_msg = str(e)
+                
+                if "CUDA out of memory" in error_msg or "out of memory" in error_msg.lower():
+                    friendly_msg = "Out of memory. Try reducing resolution, batch size, or disabling ControlNet."
+                elif "FileNotFoundError" in str(type(e)) or "No such file" in error_msg:
+                    friendly_msg = "Model file not found. Check path or re-download."
+                else:
+                    friendly_msg = f"Generation failed: {error_msg}"
+                
+                task.yields.append(['preview', (100, f'Error: {friendly_msg}', None)])
+                task.yields.append(['finish', []])
+                task.results = []
+                
             finally:
                 if pid in modules.patch.patch_settings:
                     del modules.patch.patch_settings[pid]
