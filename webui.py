@@ -369,7 +369,7 @@ with shared.gradio_root:
                                     else:
                                         return [
                                             gr.update(visible=False),  # uov_denoise_upscale
-                                            gr.update()                # uov_denoise_state（保持当前值，不影响）
+                                            gr.update()                # uov_denoise_state keep current number
                                         ]
 
                                 uov_advanced.change(

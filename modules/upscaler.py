@@ -7,7 +7,7 @@ from ldm_patched.contrib.external_upscale_model import ImageUpscaleWithModel
 from collections import OrderedDict
 from modules.config import path_upscale_models
 
-model_filename = os.path.join(path_upscale_models, 'fooocus_upscaler_s409985e5.bin')
+model_filename = os.path.join(path_upscale_models, 'fooocus_upscaler.bin')
 opImageUpscaleWithModel = ImageUpscaleWithModel()
 model = None
 

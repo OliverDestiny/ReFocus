@@ -3,9 +3,26 @@ import numpy as np
 import torch
 from rembg import remove, new_session
 from extras.GroundingDINO.util.inference import default_groundingdino
+from modules.model_loader import load_file_from_url
+import os
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+# rembg default cache folder
+U2NET_HOME = os.path.join(os.path.expanduser('~'), '.u2net')
+U2NET_PATH = os.path.join(U2NET_HOME, 'u2net.onnx')
+
+
+def ensure_u2net_downloaded():
+    """ensure u2net.onnx exists in rembg cache folder, if not, download from backup repo"""
+    if not os.path.exists(U2NET_PATH):
+        print('[ReFocus] u2net.onnx not found in cache. Downloading from mirror...')
+        os.makedirs(U2NET_HOME, exist_ok=True)
+        load_file_from_url(
+            url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/u2net.onnx',
+            model_dir=U2NET_HOME,
+            file_name='u2net.onnx'
+        )
 
 def run_grounded_sam(input_image, text_prompt, box_threshold, text_threshold):
 
@@ -33,6 +50,8 @@ def generate_mask_from_image(image, mask_model, extras):
         extras['sam_prompt'] = []
         for idx, box in enumerate(boxes):
             extras['sam_prompt'] += [{"type": "rectangle", "data": box.tolist()}]
+
+    ensure_u2net_downloaded()
 
     return remove(
         image,

@@ -519,7 +519,7 @@ def downloading_inpaint_models(v):
     assert v in modules.flags.inpaint_engine_versions
 
     load_file_from_url(
-        url='https://huggingface.co/lllyasviel/fooocus_inpaint/resolve/main/fooocus_inpaint_head.pth',
+        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/fooocus_inpaint_head.pth',
         model_dir=path_inpaint,
         file_name='fooocus_inpaint_head.pth'
     )
@@ -528,7 +528,7 @@ def downloading_inpaint_models(v):
 
     if v == 'v1':
         load_file_from_url(
-            url='https://huggingface.co/lllyasviel/fooocus_inpaint/resolve/main/inpaint.fooocus.patch',
+            url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/inpaint.fooocus.patch',
             model_dir=path_inpaint,
             file_name='inpaint.fooocus.patch'
         )
@@ -536,7 +536,7 @@ def downloading_inpaint_models(v):
 
     if v == 'v2.5':
         load_file_from_url(
-            url='https://huggingface.co/lllyasviel/fooocus_inpaint/resolve/main/inpaint_v25.fooocus.patch',
+            url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/inpaint_v25.fooocus.patch',
             model_dir=path_inpaint,
             file_name='inpaint_v25.fooocus.patch'
         )
@@ -544,7 +544,7 @@ def downloading_inpaint_models(v):
 
     if v == 'v2.6':
         load_file_from_url(
-            url='https://huggingface.co/lllyasviel/fooocus_inpaint/resolve/main/inpaint_v26.fooocus.patch',
+            url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/inpaint_v26.fooocus.patch',
             model_dir=path_inpaint,
             file_name='inpaint_v26.fooocus.patch'
         )
@@ -555,7 +555,7 @@ def downloading_inpaint_models(v):
 
 def downloading_sdxl_lcm_lora():
     load_file_from_url(
-        url='https://huggingface.co/lllyasviel/misc/resolve/main/sdxl_lcm_lora.safetensors',
+        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/sdxl_lcm_lora.safetensors',
         model_dir=path_loras,
         file_name='sdxl_lcm_lora.safetensors'
     )
@@ -564,7 +564,7 @@ def downloading_sdxl_lcm_lora():
 
 def downloading_controlnet_canny():
     load_file_from_url(
-        url='https://huggingface.co/lllyasviel/misc/resolve/main/control-lora-canny-rank128.safetensors',
+        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/control-lora-canny-rank128.safetensors',
         model_dir=path_controlnet,
         file_name='control-lora-canny-rank128.safetensors'
     )
@@ -573,7 +573,7 @@ def downloading_controlnet_canny():
 
 def downloading_controlnet_cpds():
     load_file_from_url(
-        url='https://huggingface.co/lllyasviel/misc/resolve/main/fooocus_xl_cpds_128.safetensors',
+        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/fooocus_xl_cpds_128.safetensors',
         model_dir=path_controlnet,
         file_name='fooocus_xl_cpds_128.safetensors'
     )
@@ -586,14 +586,14 @@ def downloading_ip_adapters(v):
     results = []
 
     load_file_from_url(
-        url='https://huggingface.co/lllyasviel/misc/resolve/main/clip_vision_vit_h.safetensors',
+        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/clip_vision_vit_h.safetensors',
         model_dir=path_clip_vision,
         file_name='clip_vision_vit_h.safetensors'
     )
     results += [os.path.join(path_clip_vision, 'clip_vision_vit_h.safetensors')]
 
     load_file_from_url(
-        url='https://huggingface.co/lllyasviel/misc/resolve/main/fooocus_ip_negative.safetensors',
+        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/fooocus_ip_negative.safetensors',
         model_dir=path_controlnet,
         file_name='fooocus_ip_negative.safetensors'
     )
@@ -601,7 +601,7 @@ def downloading_ip_adapters(v):
 
     if v == 'ip':
         load_file_from_url(
-            url='https://huggingface.co/lllyasviel/misc/resolve/main/ip-adapter-plus_sdxl_vit-h.bin',
+            url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/ip-adapter-plus_sdxl_vit-h.bin',
             model_dir=path_controlnet,
             file_name='ip-adapter-plus_sdxl_vit-h.bin'
         )
@@ -609,7 +609,7 @@ def downloading_ip_adapters(v):
 
     if v == 'face':
         load_file_from_url(
-            url='https://huggingface.co/lllyasviel/misc/resolve/main/ip-adapter-plus-face_sdxl_vit-h.bin',
+            url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/ip-adapter-plus-face_sdxl_vit-h.bin',
             model_dir=path_controlnet,
             file_name='ip-adapter-plus-face_sdxl_vit-h.bin'
         )
@@ -620,11 +620,11 @@ def downloading_ip_adapters(v):
 
 def downloading_upscale_model():
     load_file_from_url(
-        url='https://huggingface.co/lllyasviel/misc/resolve/main/fooocus_upscaler_s409985e5.bin',
+        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/fooocus_upscaler.bin',
         model_dir=path_upscale_models,
-        file_name='fooocus_upscaler_s409985e5.bin'
+        file_name='fooocus_upscaler.bin'
     )
-    return os.path.join(path_upscale_models, 'fooocus_upscaler_s409985e5.bin')
+    return os.path.join(path_upscale_models, 'fooocus_upscaler.bin')
 
 
 update_all_model_names()
