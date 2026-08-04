@@ -80,6 +80,7 @@ def generate_clicked(task):
         model_management.interrupt_processing = False
 
     execution_start_time = time.perf_counter()
+    last_activity_time = execution_start_time
     finished = False
 
     yield gr.update(visible=True, value=modules.html.make_progress_html(1, 'Waiting for task to start ...')), \
@@ -95,13 +96,17 @@ def generate_clicked(task):
         print("[Warning] generate_clicked got incomplete args (len < 40), not appending to async_tasks.")
         yield gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True, value=[])
         return
+
     worker.async_tasks.append(task)
 
     while not finished:
         time.sleep(0.01)
-        if time.perf_counter() - execution_start_time > 60:
-            print("[Warning] generate_clicked timeout (1min), forcing finish to prevent UI freeze.")
-            yield gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True, value=task.results if hasattr(task, 'results') and task.results else [])
+
+        # ---- overtime check based on activity time ----
+        if time.perf_counter() - last_activity_time > 60:
+            print("[Warning] No progress for 60 seconds, forcing finish to prevent UI freeze.")
+            yield gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), \
+                gr.update(visible=True, value=task.results if hasattr(task, 'results') and task.results else [])
             finished = True
             break
 
@@ -115,11 +120,13 @@ def generate_clicked(task):
                     gr.update(visible=True, value=image) if image is not None else gr.update(), \
                     gr.update(), \
                     gr.update(visible=False)
+                last_activity_time = time.perf_counter()  # update active time
             if flag == 'results':
                 yield gr.update(visible=True), \
                     gr.update(visible=True), \
                     gr.update(visible=True, value=product), \
                     gr.update(visible=False)
+                last_activity_time = time.perf_counter()
             if flag == 'finish':
                 yield gr.update(visible=False), \
                     gr.update(visible=False), \
@@ -129,6 +136,7 @@ def generate_clicked(task):
                 if args_manager.args.disable_image_log:
                     for filepath in product:
                         os.remove(filepath)
+                last_activity_time = time.perf_counter()
 
     execution_time = time.perf_counter() - execution_start_time
     global time_taken

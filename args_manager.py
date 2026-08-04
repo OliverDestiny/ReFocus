@@ -24,9 +24,6 @@ args_parser.parser.add_argument("--disable-analytics", action='store_true',
 args_parser.parser.add_argument("--disable-metadata", action='store_true',
                                 help="Disables saving metadata to images.")
 
-args_parser.parser.add_argument("--disable-in-browser", action='store_true',
-                                help="Prevent opening the browser automatically on startup.")
-
 args_parser.parser.set_defaults(
     in_browser=True,
     port=None
