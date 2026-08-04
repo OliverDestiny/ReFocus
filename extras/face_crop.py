@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import os
 import modules.config
-from extras.deps_models_download import ensure_facexlib_models
+from modules.deps_models_download import ensure_facexlib_models
 
 faceRestoreHelper = None
 
