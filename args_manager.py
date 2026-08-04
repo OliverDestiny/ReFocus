@@ -24,6 +24,9 @@ args_parser.parser.add_argument("--disable-analytics", action='store_true',
 args_parser.parser.add_argument("--disable-metadata", action='store_true',
                                 help="Disables saving metadata to images.")
 
+args_parser.parser.add_argument("--disable-preset-selection", action='store_true',
+                                help="Disables preset selection in Gradio.")
+
 args_parser.parser.set_defaults(
     in_browser=True,
     port=None

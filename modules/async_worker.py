@@ -295,7 +295,6 @@ def worker():
                 elif uov_mode == flags.UOV_MODE_UPSCALE:
                     goals.append('upscale')
                     skip_prompt_processing = uov_ignore_prompt or uov_fast
-                    progressbar(async_task, 1, 'Downloading upscale models ...')
                     downloader.downloading_upscale_model()
                 else:
                     pass
@@ -374,12 +373,10 @@ def worker():
                 inpaint_image = HWC3(inpaint_image)
                 if isinstance(inpaint_image, np.ndarray) and isinstance(inpaint_mask, np.ndarray) \
                         and (np.any(inpaint_mask > 127) or len(outpaint_selections) > 0):
-                    progressbar(async_task, 1, 'Downloading upscale models ...')
                     downloader.downloading_upscale_model()
                     goals.append('inpaint')
 
                     if inpaint_parameterized:
-                        progressbar(async_task, 1, 'Downloading inpainter ...')
                         inpaint_head_model_path, inpaint_patch_model_path = downloader.downloading_inpaint_models(inpaint_engine)
                         base_model_additional_loras += [(inpaint_patch_model_path, 1.0)]
                         print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
@@ -401,7 +398,6 @@ def worker():
                     mixing_image_prompt_and_vary_upscale or \
                     mixing_image_prompt_and_inpaint:
                 goals.append('cn')
-                progressbar(async_task, 1, 'Downloading control models ...')
                 if len(cn_tasks[flags.cn_canny]) > 0:
                     controlnet_canny_path = downloader.downloading_controlnet_canny()
                     controlnet_canny_path = str(Path(controlnet_canny_path).resolve())
