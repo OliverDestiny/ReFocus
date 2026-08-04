@@ -413,14 +413,27 @@ with shared.gradio_root:
                                     outputs=[uov_denoise_state]
                                 )
 
-                                def on_fast_change(fast_checked, current_ignore, cached_ignore):
+                                def on_fast_change(fast_checked, current_ignore, cached_ignore, advanced_checked):
                                     if fast_checked:
-                                        return (gr.update(value=True, interactive=False),current_ignore)
+                                        # Fast mode: force Advanced off and locked
+                                        return (
+                                            gr.update(value=True, interactive=False),  # uov_ignore_prompt
+                                            current_ignore,                            # ignore_prompt_cache
+                                            gr.update(value=False, interactive=False)  # uov_advanced
+                                        )
                                     else:
-                                        
-                                        return (gr.update(value=cached_ignore, interactive=True),cached_ignore)
-                                uov_fast.change(on_fast_change,inputs=[uov_fast, uov_ignore_prompt, ignore_prompt_cache],outputs=[uov_ignore_prompt, ignore_prompt_cache])
+                                        # Exit Fast mode: restore Advanced interactive
+                                        return (
+                                            gr.update(value=cached_ignore, interactive=True),  # uov_ignore_prompt
+                                            cached_ignore,                                     # ignore_prompt_cache
+                                            gr.update(interactive=True)                        # uov_advanced (keep current value)
+                                        )
 
+                                uov_fast.change(
+                                    on_fast_change,
+                                    inputs=[uov_fast, uov_ignore_prompt, ignore_prompt_cache, uov_advanced],
+                                    outputs=[uov_ignore_prompt, ignore_prompt_cache, uov_advanced]
+                                )
                                 btn_025x.click(lambda: gr.update(value=0.25), outputs=[uov_scale])
                                 btn_05x.click(lambda: gr.update(value=0.5), outputs=[uov_scale])
                                 btn_15x.click(lambda: gr.update(value=1.5), outputs=[uov_scale])
@@ -446,11 +459,11 @@ with shared.gradio_root:
                                         with gr.Row():
                                             default_end, default_weight = flags.default_parameters[flags.default_ip]
 
-                                            ip_stop = gr.Slider(label='Stop At', minimum=0.0, maximum=1.0, step=0.001, value=default_end)
+                                            ip_stop = gr.Slider(label='Stop At', minimum=0.0, maximum=1.0, step=0.001, value=default_end, buttons=[])
                                             ip_stops.append(ip_stop)
                                             ip_ctrls.append(ip_stop)
 
-                                            ip_weight = gr.Slider(label='Weight', minimum=0.0, maximum=2.0, step=0.001, value=default_weight)
+                                            ip_weight = gr.Slider(label='Weight', minimum=0.0, maximum=2.0, step=0.001, value=default_weight, buttons=[])
                                             ip_weights.append(ip_weight)
                                             ip_ctrls.append(ip_weight)
 
@@ -464,14 +477,9 @@ with shared.gradio_root:
                         gr.HTML('* \"Image Prompt\" is powered by Fooocus Image Mixture Engine (v1.0.1). <a href="https://github.com/lllyasviel/Fooocus/discussions/557" target="_blank">\U0001F4D4 Document</a>')
 
                         def ip_advance_checked(x):
-                            return [gr.update(visible=x)] * len(ip_ad_cols) + \
-                                [flags.default_ip] * len(ip_types) + \
-                                [flags.default_parameters[flags.default_ip][0]] * len(ip_stops) + \
-                                [flags.default_parameters[flags.default_ip][1]] * len(ip_weights)
+                            return [gr.update(visible=x)] * len(ip_ad_cols)
 
-                        ip_advanced.change(ip_advance_checked, inputs=ip_advanced,
-                                           outputs=ip_ad_cols + ip_types + ip_stops + ip_weights,
-                                           queue=False, show_progress=False)
+                        ip_advanced.change(ip_advance_checked, inputs=ip_advanced, outputs=ip_ad_cols, queue=False, show_progress=False)
 
                     with gr.TabItem(label='Inpaint or Outpaint') as inpaint_tab:
                         with gr.Row():
@@ -564,17 +572,19 @@ with shared.gradio_root:
                         def trigger_metadata_preview(filepath):
                             parameters, metadata_scheme = modules.meta_parser.read_info_from_image(filepath)
 
+                            if parameters is None:
+                                return {"message": "No metadata found in image"}, gr.update(interactive=False)
                             results = {}
                             if parameters is not None:
                                 results['parameters'] = parameters
 
                             if isinstance(metadata_scheme, flags.MetadataScheme):
                                 results['metadata_scheme'] = metadata_scheme.value
-
-                            return results
+                            return results, gr.update(interactive=True)
 
                         metadata_input_image.upload(trigger_metadata_preview, inputs=metadata_input_image,
-                                                    outputs=metadata_json, queue=False, show_progress=True)
+                                                    outputs=[metadata_json, metadata_import_button],
+                                                    queue=False, show_progress=True)
 
             switch_js = "(x) => {if(x){viewer_to_bottom(100);viewer_to_bottom(500);}else{viewer_to_top();} return x;}"
             down_js = "() => {viewer_to_bottom();}"
