@@ -79,8 +79,4 @@ import webbrowser
 if args.in_browser:
     webbrowser.open(f"http://{host}:{port}/")
 
-try:
-    uvicorn.run(app, host=host, port=port, log_level="info", access_log=False)
-except KeyboardInterrupt:
-    print("Shutting down...")
-    sys.exit(0)
+uvicorn.run(app, host=host, port=port, log_level="info", access_log=False)

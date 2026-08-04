@@ -277,11 +277,10 @@ def worker():
         tasks = []
 
         if input_image_checkbox:
-            # --- download Inpaint model if needed ---
             inpaint_head_model_path = None
             inpaint_patch_model_path = None
 
-            # --- 计算 switch ---
+            # --- get switch ---
             switch = int(round(steps * refiner_switch))
             if overwrite_switch > 0:
                 switch = overwrite_switch
