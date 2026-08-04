@@ -1,9 +1,49 @@
 import cv2
 import numpy as np
+import os
 import modules.config
-
+from modules.model_loader import load_file_from_url
 
 faceRestoreHelper = None
+
+# two models file route needed by facexlib
+PARSING_FILE = os.path.join(modules.config.path_controlnet, 'parsing_parsenet.pth')
+DETECTION_FILE = os.path.join(modules.config.path_controlnet, 'detection_Resnet50_Final.pth')
+
+
+def ensure_facexlib_files():
+    """
+    ensure 2 models needed by facexlib exists,
+    download from backup repo first,
+    fail then download automatically by facexlib from github
+    """
+    # check and download parsing_parsenet.pth
+    if not os.path.exists(PARSING_FILE):
+        print('[ReFocus] parsing_parsenet.pth not found. Attempting mirror download...')
+        try:
+            load_file_from_url(
+                url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/parsing_parsenet.pth',
+                model_dir=modules.config.path_controlnet,
+                file_name='parsing_parsenet.pth'
+            )
+            print('[ReFocus] parsing_parsenet.pth downloaded from mirror successfully.')
+        except Exception as e:
+            print(f'[ReFocus] Mirror download failed for parsing_parsenet.pth: {e}')
+            print('[ReFocus] Will rely on facexlib to download from original source.')
+
+    # check and download detection_Resnet50_Final.pth
+    if not os.path.exists(DETECTION_FILE):
+        print('[ReFocus] detection_Resnet50_Final.pth not found. Attempting mirror download...')
+        try:
+            load_file_from_url(
+                url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/detection_Resnet50_Final.pth',
+                model_dir=modules.config.path_controlnet,
+                file_name='detection_Resnet50_Final.pth'
+            )
+            print('[ReFocus] detection_Resnet50_Final.pth downloaded from mirror successfully.')
+        except Exception as e:
+            print(f'[ReFocus] Mirror download failed for detection_Resnet50_Final.pth: {e}')
+            print('[ReFocus] Will rely on facexlib to download from original source.')
 
 
 def align_warp_face(self, landmark, border_mode='constant'):
@@ -23,7 +63,9 @@ def align_warp_face(self, landmark, border_mode='constant'):
 
 def crop_image(img_rgb):
     global faceRestoreHelper
-    
+
+    ensure_facexlib_files()
+
     if faceRestoreHelper is None:
         from extras.facexlib.utils.face_restoration_helper import FaceRestoreHelper
         faceRestoreHelper = FaceRestoreHelper(

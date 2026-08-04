@@ -14,15 +14,25 @@ U2NET_PATH = os.path.join(U2NET_HOME, 'u2net.onnx')
 
 
 def ensure_u2net_downloaded():
-    """ensure u2net.onnx exists in rembg cache folder, if not, download from backup repo"""
+    """
+    ensure u2net.onnx exists in rembg cache folder
+    download from backup repo first,
+    fail then download automatically by rembg from github
+    """
     if not os.path.exists(U2NET_PATH):
-        print('[ReFocus] u2net.onnx not found in cache. Downloading from mirror...')
-        os.makedirs(U2NET_HOME, exist_ok=True)
-        load_file_from_url(
-            url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/u2net.onnx',
-            model_dir=U2NET_HOME,
-            file_name='u2net.onnx'
-        )
+        print('[ReFocus] u2net.onnx not found in cache. Attempting mirror download...')
+        try:
+            os.makedirs(U2NET_HOME, exist_ok=True)
+            load_file_from_url(
+                url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/u2net.onnx',
+                model_dir=U2NET_HOME,
+                file_name='u2net.onnx'
+            )
+            print('[ReFocus] u2net.onnx downloaded from mirror successfully.')
+        except Exception as e:
+            print(f'[ReFocus] Mirror download failed for u2net.onnx: {e}')
+            print('[ReFocus] Will rely on rembg to download from original source.')
+
 
 def run_grounded_sam(input_image, text_prompt, box_threshold, text_threshold):
 
