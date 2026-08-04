@@ -1068,15 +1068,3 @@ with shared.gradio_root:
             show_progress=True,
             queue=True
         )
-        def trigger_uov_describe(mode, img, prompt):
-            if prompt == '':
-                return trigger_describe(mode, img)
-            return gr.update()
-
-        uov_input_image.upload(
-            trigger_uov_describe,
-            inputs=[desc_method, uov_input_image, prompt],
-            outputs=[prompt],
-            show_progress=True,
-            queue=True
-        )
