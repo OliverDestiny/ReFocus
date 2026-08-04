@@ -102,7 +102,21 @@ def generate_clicked(task):
     while not finished:
         time.sleep(0.01)
 
-        # ---- overtime check based on activity time ----
+        # ---- defending detection: worker stopped but no waiting events ----
+        if hasattr(task, 'processing') and not task.processing and len(task.yields) == 0:
+            # let finish event first reach window (avoid competing conditions)
+            time.sleep(0.05)
+            if len(task.yields) == 0:  # Check twice
+                if task.results:
+                    yield gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), \
+                        gr.update(visible=True, value=task.results)
+                else:
+                    yield gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), \
+                        gr.update(visible=True, value=[])
+                finished = True
+                break
+
+        # ---- overtime detection based on idle time ----
         if time.perf_counter() - last_activity_time > 60:
             print("[Warning] No progress for 60 seconds, forcing finish to prevent UI freeze.")
             yield gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), \

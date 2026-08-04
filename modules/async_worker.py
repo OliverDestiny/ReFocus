@@ -901,12 +901,14 @@ def worker():
         if len(async_tasks) > 0:
             task = async_tasks.pop(0)
 
-            if not task.args:  # 防止空任务导致pop报错
+            if not task.args:  # prevent empty task causing pop error
                 print("[Warning] async_worker got empty task.args, skip this task.")
                 continue
 
             try:
                 handler(task)
+                # handler has add finish flag and set processing = False
+                # double protection, but will not be executed, handler will return
                 task.yields.append(['finish', task.results])
                 pipeline.prepare_text_encoder(async_call=True)
             except Exception as e:
@@ -921,9 +923,19 @@ def worker():
                 else:
                     friendly_msg = f"Generation failed: {error_msg}"
                 
-                task.yields.append(['preview', (100, f'Error: {friendly_msg}', None)])
-                task.yields.append(['finish', []])
-                task.results = []
+                # check finish flag
+                has_finish = any(flag == 'finish' for flag, _ in task.yields)
+                
+                if not has_finish:
+                    # handler fail: clean up result, add finish
+                    task.yields.append(['preview', (100, f'Error: {friendly_msg}', None)])
+                    task.yields.append(['finish', []])
+                    task.results = []
+                else:
+                    # handler done, following steps fail: keep results, add error msg
+                    task.yields.append(['preview', (100, f'Error in post-processing: {friendly_msg}', None)])
+                
+                task.processing = False
                 
             finally:
                 if pid in modules.patch.patch_settings:
