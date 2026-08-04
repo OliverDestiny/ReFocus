@@ -9,7 +9,7 @@ import onnxruntime as ort
 from PIL import Image
 from onnxruntime import InferenceSession
 from modules.config import path_clip_vision
-from extras.deps_models_download import ensure_wd14_tagger_models
+from modules.deps_models_download import ensure_wd14_tagger_models
 
 global_model = None
 global_csv = None

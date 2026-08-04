@@ -8,7 +8,7 @@ import ldm_patched.modules.model_management
 
 from ldm_patched.modules.model_patcher import ModelPatcher
 from modules.config import path_vae_approx
-from extras.deps_models_download import ensure_vae_interposer_model
+from modules.deps_models_download import ensure_vae_interposer_model
 
 
 class Block(nn.Module):

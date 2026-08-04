@@ -4,7 +4,7 @@ import torch
 from rembg import remove, new_session
 from extras.GroundingDINO.util.inference import default_groundingdino
 import os
-from extras.deps_models_download import ensure_u2net_model
+from modules.deps_models_download import ensure_u2net_model
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

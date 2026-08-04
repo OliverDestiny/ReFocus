@@ -43,7 +43,7 @@ def worker():
     import modules.constants as constants
     import extras.ip_adapter as ip_adapter
     import extras.face_crop
-    import extras.deps_models_download as downloader
+    import modules.deps_models_download as downloader
     import ReFocus_version
     import args_manager
 

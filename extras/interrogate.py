@@ -7,7 +7,7 @@ from torchvision.transforms.functional import InterpolationMode
 from modules.config import path_clip_vision
 from ldm_patched.modules.model_patcher import ModelPatcher
 from extras.BLIP.models.blip import blip_decoder
-from extras.deps_models_download import ensure_blip_caption_model
+from modules.deps_models_download import ensure_blip_caption_model
 
 blip_image_eval_size = 384
 blip_repo_root = os.path.join(os.path.dirname(__file__), 'BLIP')
