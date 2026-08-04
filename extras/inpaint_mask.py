@@ -8,10 +8,6 @@ from modules.deps_models_download import ensure_u2net_model
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# rembg default cache folder
-U2NET_HOME = os.path.join(os.path.expanduser('~'), '.u2net')
-U2NET_PATH = os.path.join(U2NET_HOME, 'u2net.onnx')
-
 
 def run_grounded_sam(input_image, text_prompt, box_threshold, text_threshold):
 

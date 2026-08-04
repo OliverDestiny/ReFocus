@@ -6,10 +6,6 @@ from modules.deps_models_download import ensure_facexlib_models
 
 faceRestoreHelper = None
 
-# two models file route needed by facexlib
-PARSING_FILE = os.path.join(modules.config.path_controlnet, 'parsing_parsenet.pth')
-DETECTION_FILE = os.path.join(modules.config.path_controlnet, 'detection_Resnet50_Final.pth')
-
 
 def align_warp_face(self, landmark, border_mode='constant'):
     affine_matrix = cv2.estimateAffinePartial2D(landmark, self.face_template, method=cv2.LMEDS)[0]

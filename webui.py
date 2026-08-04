@@ -164,14 +164,14 @@ if isinstance(args_manager.args.preset, str):
 
 shared.gradio_root = gr.Blocks(title=title).queue()
 
-# ========== 转换函数：将 ImageEditor 输出转为旧版格式 ==========
+# ========== convert ImageEditor output to legacy to meet backend ==========
 def convert_editor_to_legacy(editor_data):
     """
-    将 gr.ImageEditor 的输出转换为旧版 async_worker 期望的格式。
-    旧版期望：
+    convert gr.ImageEditor output format to async_worker input needed
+    legacy want:
         {
             "image": numpy.ndarray,  # RGB, shape (H, W, 3), dtype uint8
-            "mask": numpy.ndarray    # RGBA, shape (H, W, 4), dtype uint8, 且红色通道为 mask
+            "mask": numpy.ndarray    # RGBA, shape (H, W, 4), dtype uint8, and red channel is mask
         }
     """
     if editor_data is None:
@@ -207,14 +207,59 @@ def convert_editor_to_legacy(editor_data):
 
     mask = (mask > 127).astype(np.uint8) * 255
     mask_rgba = np.zeros((H, W, 4), dtype=np.uint8)
-    mask_rgba[:, :, 0] = mask  # 红色通道
+    mask_rgba[:, :, 0] = mask  # red channel
 
     return {
         "image": bg,
         "mask": mask_rgba
     }
 
-# ========== 构建 UI ==========
+
+def apply_uploaded_mask_to_editor(editor_data, mask_img):
+    """
+    convert uploaded mask to semi-transparent layer in ImageEditor
+    keep original background, only change layer
+    """
+    if mask_img is None or editor_data is None:
+        return gr.update()
+
+    bg = editor_data.get("background")
+    if bg is None:
+        bg = editor_data.get("composite")
+    if bg is None:
+        return gr.update()
+
+    # process mask array
+    if mask_img.dtype != np.uint8:
+        if mask_img.max() <= 1.0:
+            mask_img = (mask_img * 255).astype(np.uint8)
+        else:
+            mask_img = mask_img.astype(np.uint8)
+
+    # convert to 1 channel
+    if mask_img.ndim == 3:
+        mask = mask_img[:, :, 0]
+    else:
+        mask = mask_img
+
+    # Binarization
+    mask = (mask > 127).astype(np.uint8) * 255
+
+    # Adjust the size to match the background
+    H, W = bg.shape[:2]
+    if mask.shape[:2] != (H, W):
+        from modules.util import resample_image
+        mask = resample_image(mask, W, H)
+        print(f'[Inpaint] Resized uploaded mask to {mask.shape}')
+
+    # Create a semi-transparent red RGBA overlay layer with 70% opacity
+    overlay = np.zeros((mask.shape[0], mask.shape[1], 4), dtype=np.uint8)
+    overlay[:, :, 0] = 255
+    overlay[:, :, 3] = (mask * 0.7).astype(np.uint8)
+
+    return {"background": bg, "layers": [overlay]}
+
+# ========== Build UI ==========
 with shared.gradio_root:
     currentTask = gr.State(worker.AsyncTask(args=[]))
     with gr.Row():
@@ -505,6 +550,15 @@ with shared.gradio_root:
                             with gr.Column(visible=False) as inpaint_mask_generation_col:
                                 inpaint_mask_image = gr.Image(label='Mask Upload', sources=['upload'], type='numpy',
                                                                height=500)
+
+                                inpaint_mask_image.upload(
+                                    apply_uploaded_mask_to_editor,
+                                    inputs=[inpaint_input_image, inpaint_mask_image],
+                                    outputs=inpaint_input_image,
+                                    queue=False,
+                                    show_progress=False
+                                )
+
                                 inpaint_mask_model = gr.Dropdown(label='Mask generation model',
                                                                  choices=flags.inpaint_mask_models,
                                                                  value=modules.config.default_inpaint_mask_model)
