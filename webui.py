@@ -709,9 +709,6 @@ with shared.gradio_root:
                                                  value=modules.config.default_cfg_tsnr,
                                                  info='Enabling Fooocus\'s implementation of CFG mimicking for TSNR '
                                                       '(effective when real CFG > mimicked CFG).')
-                        generate_image_grid = gr.Checkbox(label='Generate Image Grid for Each Batch',
-                                                          info='(Experimental) This may cause performance problems on some computers and certain internet conditions.',
-                                                          value=False)
 
                         overwrite_step = gr.Slider(label='Forced Overwrite of Sampling Step',
                                                    minimum=-1, maximum=200, step=1,
@@ -950,7 +947,7 @@ with shared.gradio_root:
             queue=False
         )
 
-        ctrls = [currentTask, generate_image_grid]
+        ctrls = [currentTask]
         ctrls += [
             prompt, negative_prompt, translate_prompts, 
             steps_slider, aspect_ratios_selection, image_number, output_format, image_seed, sharpness, guidance_scale

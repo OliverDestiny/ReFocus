@@ -96,46 +96,6 @@ def worker():
         async_task.yields.append(['results', async_task.results])
         return
 
-    def build_image_wall(async_task):
-        results = async_task.results
-
-        if len(results) < 2:
-            return
-
-        for img in results:
-            if not isinstance(img, np.ndarray):
-                return
-            if img.ndim != 3:
-                return
-
-        H, W, C = results[0].shape
-
-        for img in results:
-            Hn, Wn, Cn = img.shape
-            if H != Hn:
-                return
-            if W != Wn:
-                return
-            if C != Cn:
-                return
-
-        cols = float(len(results)) ** 0.5
-        cols = int(math.ceil(cols))
-        rows = float(len(results)) / float(cols)
-        rows = int(math.ceil(rows))
-
-        wall = np.zeros(shape=(H * rows, W * cols, C), dtype=np.uint8)
-
-        for y in range(rows):
-            for x in range(cols):
-                if y * cols + x < len(results):
-                    img = results[y * cols + x]
-                    wall[y * H:y * H + H, x * W:x * W + W, :] = img
-
-        # must use deep copy otherwise gradio is super laggy. Do not use list.append() .
-        async_task.results = async_task.results + [wall]
-        return
-
     @torch.no_grad()
     @torch.inference_mode()
     def handler(async_task):
@@ -949,10 +909,7 @@ def worker():
                 continue
 
             try:
-                generate_image_grid = task.args.pop(0)
                 handler(task)
-                if generate_image_grid:
-                    build_image_wall(task)
                 task.yields.append(['finish', task.results])
                 pipeline.prepare_text_encoder(async_call=True)
             except Exception as e:

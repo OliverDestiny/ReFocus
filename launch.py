@@ -76,6 +76,7 @@ mount_gradio_app(
 print(f"ReFocus UI at http://localhost:{port}/")
 
 import webbrowser
-webbrowser.open(f"http://{host}:{port}/")
+if args.in_browser:
+    webbrowser.open(f"http://{host}:{port}/")
 
 uvicorn.run(app, host=host, port=port, log_level="info", access_log=False)
