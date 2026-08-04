@@ -291,10 +291,10 @@ def worker():
                     and uov_mode != flags.UOV_MODE_DISABLED and uov_input_image is not None:
                 if uov_mode == flags.UOV_MODE_VARY:
                     goals.append('vary')
-                    skip_prompt_processing = uov_ignore_prompt
+                    skip_prompt_processing = uov_fast
                 elif uov_mode == flags.UOV_MODE_UPSCALE:
                     goals.append('upscale')
-                    skip_prompt_processing = uov_ignore_prompt or uov_fast
+                    skip_prompt_processing = uov_fast
                     downloader.downloading_upscale_model()
                 else:
                     pass
@@ -425,6 +425,10 @@ def worker():
         if not skip_prompt_processing:
             prompts = remove_empty_str([safe_str(p) for p in prompt.splitlines()], default='')
             negative_prompts = remove_empty_str([safe_str(p) for p in negative_prompt.splitlines()], default='')
+
+            if uov_ignore_prompt:
+                prompts = ['']
+                negative_prompts = [''] 
 
             prompt = prompts[0]
             negative_prompt = negative_prompts[0]
