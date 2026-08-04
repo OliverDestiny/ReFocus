@@ -5,7 +5,6 @@ import numbers
 import args_manager
 import modules.flags
 
-from modules.model_loader import load_file_from_url
 from modules.util import get_files_from_folder
 from modules.flags import Performance, MetadataScheme, lora_count
 
@@ -43,54 +42,6 @@ except Exception as e:
     print('3. There is no "," before the last "}".')
     print('4. All key/value formats are correct.')
 
-
-def try_load_deprecated_user_path_config():
-    global config_dict
-
-    if not os.path.exists('user_path_config.txt'):
-        return
-
-    try:
-        deprecated_config_dict = json.load(open('user_path_config.txt', "r", encoding="utf-8"))
-
-        def replace_config(old_key, new_key):
-            if old_key in deprecated_config_dict:
-                config_dict[new_key] = deprecated_config_dict[old_key]
-                del deprecated_config_dict[old_key]
-
-        replace_config('modelfile_path', 'path_checkpoints')
-        replace_config('lorafile_path', 'path_loras')
-        replace_config('embeddings_path', 'path_embeddings')
-        replace_config('vae_approx_path', 'path_vae_approx')
-        replace_config('upscale_models_path', 'path_upscale_models')
-        replace_config('inpaint_models_path', 'path_inpaint')
-        replace_config('controlnet_models_path', 'path_controlnet')
-        replace_config('clip_vision_models_path', 'path_clip_vision')
-        replace_config('temp_outputs_path', 'path_outputs')
-
-        if deprecated_config_dict.get("default_model", None) == 'juggernautXL_version6Rundiffusion.safetensors':
-            os.replace('user_path_config.txt', 'user_path_config-deprecated.txt')
-            print('Config updated successfully in silence. '
-                  'A backup of previous config is written to "user_path_config-deprecated.txt".')
-            return
-
-        if input("Newer models and configs are available. "
-                 "Download and update files? [Y/n]:") in ['n', 'N', 'No', 'no', 'NO']:
-            config_dict.update(deprecated_config_dict)
-            print('Loading using deprecated old models and deprecated old configs.')
-            return
-        else:
-            os.replace('user_path_config.txt', 'user_path_config-deprecated.txt')
-            print('Config updated successfully by user. '
-                  'A backup of previous config is written to "user_path_config-deprecated.txt".')
-            return
-    except Exception as e:
-        print('Processing deprecated config failed')
-        print(e)
-    return
-
-
-try_load_deprecated_user_path_config()
 
 def list_presets():
     preset_folder = 'presets'
@@ -149,9 +100,6 @@ def get_path_output(make_directory=False) -> str:
     """
     global config_dict
     path_output = get_dir_or_set_default('path_outputs', '../outputs/', make_directory)
-    if args_manager.args.output_path:
-        print(f'[CONFIG] Overriding config value path_outputs with {args_manager.args.output_path}')
-        config_dict['path_outputs'] = path_output = args_manager.args.output_path
     return path_output
 
 
@@ -515,116 +463,6 @@ def update_all_model_names():
     return
 
 
-def downloading_inpaint_models(v):
-    assert v in modules.flags.inpaint_engine_versions
-
-    load_file_from_url(
-        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/fooocus_inpaint_head.pth',
-        model_dir=path_inpaint,
-        file_name='fooocus_inpaint_head.pth'
-    )
-    head_file = os.path.join(path_inpaint, 'fooocus_inpaint_head.pth')
-    patch_file = None
-
-    if v == 'v1':
-        load_file_from_url(
-            url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/inpaint.fooocus.patch',
-            model_dir=path_inpaint,
-            file_name='inpaint.fooocus.patch'
-        )
-        patch_file = os.path.join(path_inpaint, 'inpaint.fooocus.patch')
-
-    if v == 'v2.5':
-        load_file_from_url(
-            url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/inpaint_v25.fooocus.patch',
-            model_dir=path_inpaint,
-            file_name='inpaint_v25.fooocus.patch'
-        )
-        patch_file = os.path.join(path_inpaint, 'inpaint_v25.fooocus.patch')
-
-    if v == 'v2.6':
-        load_file_from_url(
-            url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/inpaint_v26.fooocus.patch',
-            model_dir=path_inpaint,
-            file_name='inpaint_v26.fooocus.patch'
-        )
-        patch_file = os.path.join(path_inpaint, 'inpaint_v26.fooocus.patch')
-
-    return head_file, patch_file
-
-
-def downloading_sdxl_lcm_lora():
-    load_file_from_url(
-        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/sdxl_lcm_lora.safetensors',
-        model_dir=path_loras,
-        file_name='sdxl_lcm_lora.safetensors'
-    )
-    return 'sdxl_lcm_lora.safetensors'
-
-
-def downloading_controlnet_canny():
-    load_file_from_url(
-        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/control-lora-canny-rank128.safetensors',
-        model_dir=path_controlnet,
-        file_name='control-lora-canny-rank128.safetensors'
-    )
-    return os.path.join(path_controlnet, 'control-lora-canny-rank128.safetensors')
-
-
-def downloading_controlnet_cpds():
-    load_file_from_url(
-        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/fooocus_xl_cpds_128.safetensors',
-        model_dir=path_controlnet,
-        file_name='fooocus_xl_cpds_128.safetensors'
-    )
-    return os.path.join(path_controlnet, 'fooocus_xl_cpds_128.safetensors')
-
-
-def downloading_ip_adapters(v):
-    assert v in ['ip', 'face']
-
-    results = []
-
-    load_file_from_url(
-        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/clip_vision_vit_h.safetensors',
-        model_dir=path_clip_vision,
-        file_name='clip_vision_vit_h.safetensors'
-    )
-    results += [os.path.join(path_clip_vision, 'clip_vision_vit_h.safetensors')]
-
-    load_file_from_url(
-        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/fooocus_ip_negative.safetensors',
-        model_dir=path_controlnet,
-        file_name='fooocus_ip_negative.safetensors'
-    )
-    results += [os.path.join(path_controlnet, 'fooocus_ip_negative.safetensors')]
-
-    if v == 'ip':
-        load_file_from_url(
-            url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/ip-adapter-plus_sdxl_vit-h.bin',
-            model_dir=path_controlnet,
-            file_name='ip-adapter-plus_sdxl_vit-h.bin'
-        )
-        results += [os.path.join(path_controlnet, 'ip-adapter-plus_sdxl_vit-h.bin')]
-
-    if v == 'face':
-        load_file_from_url(
-            url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/ip-adapter-plus-face_sdxl_vit-h.bin',
-            model_dir=path_controlnet,
-            file_name='ip-adapter-plus-face_sdxl_vit-h.bin'
-        )
-        results += [os.path.join(path_controlnet, 'ip-adapter-plus-face_sdxl_vit-h.bin')]
-
-    return results
-
-
-def downloading_upscale_model():
-    load_file_from_url(
-        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/fooocus_upscaler.bin',
-        model_dir=path_upscale_models,
-        file_name='fooocus_upscaler.bin'
-    )
-    return os.path.join(path_upscale_models, 'fooocus_upscaler.bin')
 
 
 update_all_model_names()

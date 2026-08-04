@@ -8,7 +8,7 @@ import ldm_patched.modules.model_management
 
 from ldm_patched.modules.model_patcher import ModelPatcher
 from modules.config import path_vae_approx
-from modules.model_loader import load_file_from_url
+from extras.deps_models_download import ensure_vae_interposer_model
 
 
 class Block(nn.Module):
@@ -69,16 +69,9 @@ vae_approx_filename = os.path.join(path_vae_approx, 'xl-to-v1_interposer-v3.1.sa
 
 def parse(x):
     global vae_approx_model
-
     x_origin = x.clone()
 
-    if not os.path.exists(vae_approx_filename):
-        print('[ReFocus] VAE interposer not found. Downloading from mirror...')
-        load_file_from_url(
-            url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/xl-to-v1_interposer-v3.1.safetensors',
-            model_dir=path_vae_approx,
-            file_name='xl-to-v1_interposer-v3.1.safetensors'
-        )
+    ensure_vae_interposer_model()
 
     if vae_approx_model is None:
         model = Interposer()

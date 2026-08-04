@@ -1,15 +1,7 @@
 # https://huggingface.co/spaces/SmilingWolf/wd-v1-4-tags
 # https://github.com/pythongosssss/ComfyUI-WD14-Tagger/blob/main/wd14tagger.py
 
-# {
-#     "wd-v1-4-moat-tagger-v2": "https://huggingface.co/SmilingWolf/wd-v1-4-moat-tagger-v2",
-#     "wd-v1-4-convnextv2-tagger-v2": "https://huggingface.co/SmilingWolf/wd-v1-4-convnextv2-tagger-v2",
-#     "wd-v1-4-convnext-tagger-v2": "https://huggingface.co/SmilingWolf/wd-v1-4-convnext-tagger-v2",
-#     "wd-v1-4-convnext-tagger": "https://huggingface.co/SmilingWolf/wd-v1-4-convnext-tagger",
-#     "wd-v1-4-vit-tagger-v2": "https://huggingface.co/SmilingWolf/wd-v1-4-vit-tagger-v2"
-# }
-
-
+import os
 import numpy as np
 import csv
 import onnxruntime as ort
@@ -17,8 +9,7 @@ import onnxruntime as ort
 from PIL import Image
 from onnxruntime import InferenceSession
 from modules.config import path_clip_vision
-from modules.model_loader import load_file_from_url
-
+from extras.deps_models_download import ensure_wd14_tagger_models
 
 global_model = None
 global_csv = None
@@ -29,17 +20,10 @@ def default_interrogator(image_rgb, threshold=0.35, character_threshold=0.85, ex
 
     model_name = "wd-v1-4-moat-tagger-v2"
 
-    model_onnx_filename = load_file_from_url(
-        url=f'https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/{model_name}.onnx',
-        model_dir=path_clip_vision,
-        file_name=f'{model_name}.onnx',
-    )
+    ensure_wd14_tagger_models()
 
-    model_csv_filename = load_file_from_url(
-        url=f'https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/{model_name}.csv',
-        model_dir=path_clip_vision,
-        file_name=f'{model_name}.csv',
-    )
+    model_onnx_filename = os.path.join(path_clip_vision, f'{model_name}.onnx')
+    model_csv_filename = os.path.join(path_clip_vision, f'{model_name}.csv')
 
     if global_model is not None:
         model = global_model

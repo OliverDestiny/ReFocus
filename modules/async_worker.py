@@ -43,6 +43,7 @@ def worker():
     import modules.constants as constants
     import extras.ip_adapter as ip_adapter
     import extras.face_crop
+    import extras.deps_models_download as downloader
     import ReFocus_version
     import args_manager
 
@@ -197,7 +198,7 @@ def worker():
             print('Auto-switching to LCM mode (1-10 steps).')
             progressbar(async_task, 1, 'Auto-switching to LCM mode (1-10 steps) ...')
 
-            lcm_lora_path = modules.config.downloading_sdxl_lcm_lora()
+            lcm_lora_path = downloader.downloading_sdxl_lcm_lora()
 
             base_model_additional_loras.append((lcm_lora_path, 1.0))
 
@@ -295,7 +296,7 @@ def worker():
                     goals.append('upscale')
                     skip_prompt_processing = uov_ignore_prompt or uov_fast
                     progressbar(async_task, 1, 'Downloading upscale models ...')
-                    modules.config.downloading_upscale_model()
+                    downloader.downloading_upscale_model()
                 else:
                     pass
 
@@ -374,12 +375,12 @@ def worker():
                 if isinstance(inpaint_image, np.ndarray) and isinstance(inpaint_mask, np.ndarray) \
                         and (np.any(inpaint_mask > 127) or len(outpaint_selections) > 0):
                     progressbar(async_task, 1, 'Downloading upscale models ...')
-                    modules.config.downloading_upscale_model()
+                    downloader.downloading_upscale_model()
                     goals.append('inpaint')
 
                     if inpaint_parameterized:
                         progressbar(async_task, 1, 'Downloading inpainter ...')
-                        inpaint_head_model_path, inpaint_patch_model_path = modules.config.downloading_inpaint_models(inpaint_engine)
+                        inpaint_head_model_path, inpaint_patch_model_path = downloader.downloading_inpaint_models(inpaint_engine)
                         base_model_additional_loras += [(inpaint_patch_model_path, 1.0)]
                         print(f'[Inpaint] Current inpaint model is {inpaint_patch_model_path}')
                         if refiner_model_name == 'None':
@@ -402,17 +403,17 @@ def worker():
                 goals.append('cn')
                 progressbar(async_task, 1, 'Downloading control models ...')
                 if len(cn_tasks[flags.cn_canny]) > 0:
-                    controlnet_canny_path = modules.config.downloading_controlnet_canny()
+                    controlnet_canny_path = downloader.downloading_controlnet_canny()
                     controlnet_canny_path = str(Path(controlnet_canny_path).resolve())
                 if len(cn_tasks[flags.cn_cpds]) > 0:
-                    controlnet_cpds_path = modules.config.downloading_controlnet_cpds()
+                    controlnet_cpds_path = downloader.downloading_controlnet_cpds()
                     controlnet_cpds_path = str(Path(controlnet_cpds_path).resolve())
                 if len(cn_tasks[flags.cn_ip]) > 0:
-                    clip_vision_path, ip_negative_path, ip_adapter_path = modules.config.downloading_ip_adapters('ip')
+                    clip_vision_path, ip_negative_path, ip_adapter_path = downloader.downloading_ip_adapters('ip')
                     ip_adapter_path = str(Path(ip_adapter_path).resolve())
                     ip_adapter.load_ip_adapter(clip_vision_path, ip_negative_path, ip_adapter_path)
                 if len(cn_tasks[flags.cn_ip_face]) > 0:
-                    clip_vision_path, ip_negative_path, ip_adapter_face_path = modules.config.downloading_ip_adapters('face')
+                    clip_vision_path, ip_negative_path, ip_adapter_face_path = downloader.downloading_ip_adapters('face')
                     ip_adapter_face_path = str(Path(ip_adapter_face_path).resolve())
                     ip_adapter.load_ip_adapter(clip_vision_path, ip_negative_path, ip_adapter_face_path)
                 progressbar(async_task, 1, 'Loading control models ...')

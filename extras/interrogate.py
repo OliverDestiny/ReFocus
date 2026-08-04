@@ -4,11 +4,10 @@ import ldm_patched.modules.model_management as model_management
 
 from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
-from modules.model_loader import load_file_from_url
 from modules.config import path_clip_vision
 from ldm_patched.modules.model_patcher import ModelPatcher
 from extras.BLIP.models.blip import blip_decoder
-
+from extras.deps_models_download import ensure_blip_caption_model
 
 blip_image_eval_size = 384
 blip_repo_root = os.path.join(os.path.dirname(__file__), 'BLIP')
@@ -25,11 +24,8 @@ class Interrogator:
     @torch.inference_mode()
     def interrogate(self, img_rgb):
         if self.blip_model is None:
-            filename = load_file_from_url(
-                url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/model_base_caption_capfilt_large.pth',
-                model_dir=path_clip_vision,
-                file_name='model_base_caption_capfilt_large.pth',
-            )
+            ensure_blip_caption_model()
+            filename = os.path.join(path_clip_vision, 'model_base_caption_capfilt_large.pth')
 
             model = blip_decoder(pretrained=filename, image_size=blip_image_eval_size, vit='base',
                                  med_config=os.path.join(blip_repo_root, "configs", "med_config.json"))
