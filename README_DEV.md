@@ -1,226 +1,232 @@
-# 📘 **README_DEV.md**  
+# README_DEV.md
 
-## *Prompt Helper + Fooocus Integration Developer Guide*  
-
-### *(Drop this file directly into your repo)*
+Developer documentation for ReFocus. For user documentation, see `manual_en.md` and `manual_cn.md`.
 
 ---
 
-## Prompt Helper + Fooocus Integration  
+## Overview
 
-### Developer Architecture Guide  
-
-### *(Stable, Remote‑Safe, and Easy to Maintain)*
-
-This document explains how the Prompt Helper standalone app integrates with Fooocus, how the URL structure works, and how to avoid the common pitfalls that caused remote rendering failures.
-
-It is written for future maintainers — including future‑you — so you never have to rediscover this logic again.
+ReFocus is a Gradio-based UI for Stable Diffusion XL image generation, rebuilt from DeFooocus with significant modifications. This document covers the architecture, key modules, and integration details relevant to developers.
 
 ---
 
-## 🧩 1. System Overview
+## Architecture
 
-The system consists of:
+### Stack
 
-1. **Fooocus Gradio UI**  
-2. **Prompt Helper Frontend** (`prompt_helper/static/index.html`)  
-3. **Prompt Helper Backend API** (`prompt_helper/app.py`)  
-4. **A1111 Extension JS** (`sd-webui-prompt-all-in-one/javascript/main.entry.js`)  
+| Component | Technology |
+| :--- | :--- |
+| UI Framework | Gradio 6.20.0 |
+| Web Server | FastAPI + Uvicorn |
+| Diffusion Core | `ldm_patched` (ComfyUI fork) |
+| Model Loading | `ldm_patched.modules.sd` |
+| Sampling | `ldm_patched.modules.samplers` |
+| Image Processing | OpenCV, PIL, NumPy |
 
-All components run inside a single FastAPI server.
+### Directory Layout
+
+```txt
+ReFocus/
+├── launch.py              # Entry point: FastAPI app + uvicorn
+├── args_manager.py        # CLI argument definitions
+├── webui.py               # Gradio UI definition (~1000+ lines)
+├── shared.py              # Shared state (gradio_root)
+├── modules/               # Core backend
+│   ├── config.py          # Config loading, model paths, presets
+│   ├── core.py            # Model loading, VAE encode/decode, ksampler
+│   ├── default_pipeline.py# Diffusion pipeline (base + refiner)
+│   ├── async_worker.py    # Async generation worker (threaded)
+│   ├── inpaint_worker.py  # Inpaint mask processing
+│   ├── deps_models_download.py # Model download utilities
+│   └── patch*.py          # Runtime patches (precision, CLIP, attention)
+├── extras/                # Optional extension modules
+│   ├── ip_adapter.py      # IP-Adapter / Image Prompt
+│   ├── interrogate.py     # BLIP captioning (Describe)
+│   ├── wd14tagger.py      # WD14 tagger (Describe/Anime)
+│   ├── inpaint_mask.py    # Mask generation (rembg, SAM)
+│   └── ...
+├── ldm_patched/           # ComfyUI-based diffusion core (GPL v3)
+├── prompt_helper/         # Prompt Helper sub-application
+│   ├── app.py             # FastAPI sub-app
+│   └── static/            # Frontend assets (Vue app)
+└── ...
+```
 
 ---
 
-## 🧭 2. Required URL Structure
+## Development Setup
 
-The Prompt Helper frontend and backend expect **exactly** these URLs:
+### Environment
 
-### Frontend Part
-
-```t
-/prompt-helper/                 → index.html
-/prompt-helper/static/css/*     → CSS files
-/prompt-helper/static/js/*      → JS files
+```bash
+conda create -n refocus python=3.10
+conda activate refocus
+pip install -r requirements.txt
 ```
 
-### Backend API
+### Running
 
-```t
-/prompt-helper/physton_prompt/get_config
-/prompt-helper/physton_prompt/get_favorites
-/prompt-helper/physton_prompt/styles?file=...
+```bash
+python launch.py
 ```
 
-### Extension JS
+### CLI Arguments
 
-```t
-/sd-webui-prompt-all-in-one-js
-```
+Key arguments defined in `args_manager.py`:
 
-### Fooocus UI
+| Argument | Description |
+| :--- | :--- |
+| `--preset` | Load a specific UI preset |
+| `--disable-preset-selection` | Hide preset dropdown in UI |
+| `--language` | Load translation from `language/*.json` |
+| `--theme` | Set Gradio theme (light/dark) |
+| `--disable-image-log` | Disable writing images to disk |
+| `--disable-metadata` | Disable metadata embedding |
 
-```t
-/
-```
-
-This structure is fixed and must not be changed unless you also update the frontend code.
+See `args_manager.py` for the full list.
 
 ---
 
-## 🧱 3. Why Local Worked but Remote Failed
+## Key Modules
 
-Originally, `index.html` used **relative paths**:
+### `async_worker.py`
+
+Runs in a separate thread (`threading.Thread`). Handles:
+
+- Parsing UI inputs (via `ctrls` list from `webui.py`)
+- Model loading and caching
+- Diffusion sampling (with progress callbacks)
+- Inpaint / Outpaint processing
+- ControlNet / IP-Adapter application
+
+The worker communicates with the UI via `AsyncTask.yields`:
+
+| Yield Flag | Purpose |
+| :--- | :--- |
+| `preview` | Update progress bar and preview image |
+| `results` | Show intermediate results |
+| `finish` | Final results and UI reset |
+
+### `webui.py`
+
+Defines the entire Gradio UI. Key sections:
+
+- **Main UI**: `gr.Blocks` with tabs (Generation, Photopea, rembg, Prompt Helper)
+- **Input Image Panel**: UOV (Upscale/Vary), Image Prompt, Inpaint/Outpaint, Describe, Metadata
+- **Settings Panel**: Steps, Aspect Ratios, Models, LoRAs, Advanced debug tools
+- **Parameter Assembly**: `ctrls` list defines the order of parameters passed to `async_worker`
+
+### `config.py`
+
+Manages:
+
+- Model paths (`path_checkpoints`, `path_loras`, etc.)
+- Default values (steps, CFG, sampler, etc.)
+- Preset loading (`presets/*.json`)
+- Model scanning (`model_filenames`, `lora_filenames`)
+
+### `deps_models_download.py`
+
+Centralized model download utility. All external model downloads route through this module.
+
+---
+
+## Prompt Helper Integration
+
+The Prompt Helper (`sd-webui-prompt-all-in-one-app`) is mounted as a sub-application inside the main FastAPI server.
+
+### URL Structure
+
+| Path | Purpose |
+| :--- | :--- |
+| `/prompt-helper/` | Vue frontend entry |
+| `/prompt-helper/static/css/*` | CSS assets |
+| `/prompt-helper/static/js/*` | JS assets |
+| `/prompt-helper/physton_prompt/*` | Backend API endpoints |
+| `/sd-webui-prompt-all-in-one-js` | Extension JS |
+
+### Mount Order (Critical)
+
+The order in `launch.py` matters:
+
+1. Static files (`/prompt-helper/static`)
+2. `index.html` endpoint (`/prompt-helper`)
+3. Extension JS (`/sd-webui-prompt-all-in-one-js`)
+4. Prompt Helper backend (`/prompt-helper`)
+5. ReFocus Gradio UI (`/`)
+
+> **Note**: Mounting static files before the backend is essential. If the backend mounts first, it will shadow the static route and return 404 for CSS/JS assets.
+
+### Path Fix: Absolute vs Relative
+
+The frontend (`static/index.html`) must use **absolute paths**:
 
 ```html
-./css/main.min.css
-./js/main.js
-```
-
-Locally, inside a Gradio iframe, these sometimes resolved to:
-
-```t
-/prompt-helper/css/main.min.css
-```
-
-Remote browsers resolve strictly:
-
-```t
-/prompt-helper/css/main.min.css → 404
-```
-
-Because the server actually served:
-
-```t
-/prompt-helper/static/css/main.min.css
-```
-
-This caused:
-
-- CSS not loading  
-- JS not loading  
-- Vue/React app not initializing  
-- Tabs disappearing  
-- Backend calls failing  
-
-The backend was correct.  
-The server was correct.  
-The mounts were correct.  
-**The frontend paths were wrong.**
-
----
-
-## 🛠️ 4. Required Fix in index.html
-
-Use **absolute paths**, not relative ones:
-
-### Correct
-
-```html
+<!-- Correct -->
 <link rel="stylesheet" href="/prompt-helper/static/css/main.min.css">
-<script src="/prompt-helper/static/js/main.js"></script>
+
+<!-- Incorrect - breaks in remote deployment -->
+<link rel="stylesheet" href="./css/main.min.css">
 ```
 
-This makes remote and local behave identically.
+Relative paths resolve differently in local vs remote environments, causing CSS/JS loading failures.
+
+### `prompt_helper/app.py` Structure
+
+The sub-application exports `create_prompt_helper_app()`, which returns a FastAPI instance. It handles:
+
+- Static file mounting (for frontend assets)
+- API routes (under `/physton_prompt`)
+- Optional HTTP basic auth (via environment variables)
 
 ---
 
-## 🧩 5. launch.py Architecture (version 0.15)
+## Testing & Debugging
 
-The server must mount components in this order:
+### UI Development
 
-### 1. Static files first  
+Gradio components are defined in `webui.py`. For UI changes, no frontend build step is required—just reload the page.
 
-So backend does not shadow them.
+### Worker Logging
 
-### 2. index.html at `/prompt-helper/`
+`async_worker.py` prints progress and debugging info. Look for `[ReFocus]` and `[Parameters]` prefixes in console output.
 
-### 3. Extension JS at `/sd-webui-prompt-all-in-one-js`
+### Model Download Issues
 
-### 4. Backend at `/prompt-helper`  
+Model download failures are logged in `deps_models_download.py`. The module attempts mirror download first, then falls back to official sources.
 
-Backend internally defines `/physton_prompt/*`.
+### Common Pitfalls
 
-### 5. Fooocus UI at `/`
-
-This order is essential.
-
----
-
-## 🧼 6. What Can Be Removed
-
-These parts are unnecessary:
-
-- `sys.path.insert(0, aio_root)`  
-- duplicate `launch.py` inside `prompt_helper/`  
-- misleading print lines  
-- any unused files inside `prompt_helper/`
-
-Everything else is required.
+| Issue | Likely Cause |
+| :--- | :--- |
+| CSS/JS missing | Relative paths in `index.html` or incorrect mount order |
+| Gradio UI not rendering | `shared.gradio_root` not set, or `mount_gradio_app` called before UI definition |
+| Worker not starting | Patch issues in `modules/patch.py` or missing imports |
+| Inpaint mask not working | Mask upload checkbox not enabled, or uploaded mask not properly merged |
 
 ---
 
-## 🔒 7. Robustness Checklist
+## Contributing Guidelines
 
-### Frontend
-
-- Always use absolute paths (`/prompt-helper/static/...`)
-- Never use relative paths (`./css/...`)
-- Keep API base paths unchanged
-
-### Backend
-
-- Always mount backend at `/prompt-helper`
-- Never mount backend at `/prompt-helper-api`, `/prompt-helper/ui`, etc.
-
-### Static
-
-- Always mount static BEFORE backend
-- Always mount static at `/prompt-helper/static`
-
-### Extension
-
-- Keep extension JS at `/sd-webui-prompt-all-in-one-js`
-
-### Testing
-
-- Test both local and remote after any change
-- Check browser console for missing CSS/JS
-- Check server logs for 404s
+1. **Code style**: Follow existing patterns; no style linters enforced.
+2. **UI changes**: Keep it minimal. Avoid adding controls unless necessary.
+3. **Backend changes**: Test with both normal and Input Image workflows.
+4. **Documentation**: Update `manual_en.md` / `manual_cn.md` for user-facing changes; update this file for developer-facing changes.
 
 ---
 
-## 🧭 8. Architecture Diagram
+## License
 
-```t
-FastAPI Server
-│
-├── /                      → Fooocus Gradio UI
-│
-├── /sd-webui-prompt-all-in-one-js
-│       → sd-webui-prompt-all-in-one/javascript/main.entry.js
-│
-└── /prompt-helper
-        │
-        ├── index.html
-        │
-        ├── /static
-        │      ├── css/*
-        │      └── js/*
-        │
-        └── /physton_prompt
-               ├── get_config
-               ├── get_favorites
-               └── styles?file=...
-```
+GNU General Public License v3.0. See `LICENSE` and `NOTICE.md` for details.
 
 ---
 
-## 🧩 9. Summary
+## References
 
-- Your original backend mount was correct.  
-- The remote failure was caused by index.html, not launch.py.  
-- Absolute static paths fix remote rendering.  
-- launch.py version 0.15 is stable and minimal.  
-- This document ensures future‑you never struggles with this again.
+- [Gradio Documentation](https://www.gradio.app/docs)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [Fooocus (upstream)](https://github.com/lllyasviel/Fooocus)
+- [DeFooocus (upstream)](https://github.com/ehristoforu/DeFooocus)
+- [ComfyUI (ldm_patched)](https://github.com/comfyanonymous/ComfyUI)
 
 ---
