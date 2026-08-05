@@ -83,14 +83,11 @@ Each reference image can be adjusted independently:
 - **Stop At**: Controls when the control network stops influencing the sampling process (higher = longer influence)
 - **Weight**: Controls the strength of the control network's influence
 
-### Inpaint / Outpaint
+### Inpaint
 
 Draw white areas (mask) on the image to let the model regenerate those regions.
 
 - **Inpaint**: Erase and redraw a specific area
-- **Outpaint**: Expand the canvas outward with automatically generated content
-  - Select expansion directions (Top, Bottom, Left, Right)
-  - The model will fill the new areas seamlessly
 
 ### Automatic Mask Generation
 

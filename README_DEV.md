@@ -31,7 +31,6 @@ ReFocus/
 │
 ├── args_manager.py              # CLI argument definitions
 ├── webui.py                     # Gradio UI definition (~1000+ lines)
-├── shared.py                    # Shared state (gradio_root)
 ├── ReFocus_version.py           # Version File
 │
 ├── modules/                     # Core backend
@@ -102,7 +101,7 @@ Runs in a separate thread (`threading.Thread`). Handles:
 - Parsing UI inputs (via `ctrls` list from `webui.py`)
 - Model loading and caching
 - Diffusion sampling (with progress callbacks)
-- Inpaint / Outpaint processing
+- Inpaint processing
 - ControlNet / IP-Adapter application
 
 The worker communicates with the UI via `AsyncTask.yields`:
@@ -118,7 +117,7 @@ The worker communicates with the UI via `AsyncTask.yields`:
 Defines the entire Gradio UI. Key sections:
 
 - **Main UI**: `gr.Blocks` with tabs (Generation, Photopea, rembg, Prompt Helper)
-- **Input Image Panel**: UOV (Upscale/Vary), Image Prompt, Inpaint/Outpaint, Describe, Metadata
+- **Input Image Panel**: UOV (Upscale/Vary), Image Prompt, Inpaint, Describe, Metadata
 - **Settings Panel**: Steps, Aspect Ratios, Models, LoRAs, Advanced debug tools
 - **Parameter Assembly**: `ctrls` list defines the order of parameters passed to `async_worker`
 
@@ -218,7 +217,7 @@ Model download failures are logged in `deps_models_download.py`. The module atte
 | Issue | Likely Cause |
 | :--- | :--- |
 | CSS/JS missing | Relative paths in `index.html` or incorrect mount order |
-| Gradio UI not rendering | `shared.gradio_root` not set, or `mount_gradio_app` called before UI definition |
+| Gradio UI not rendering | `gradio_root` not set, or `mount_gradio_app` called before UI definition |
 | Worker not starting | Patch issues in `modules/patch.py` or missing imports |
 | Inpaint mask not working | Mask upload checkbox not enabled, or uploaded mask not properly merged |
 
