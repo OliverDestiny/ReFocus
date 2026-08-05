@@ -51,16 +51,6 @@ Draw white areas (mask) on the image to let the model regenerate those regions.
   - Select expansion directions (Top, Bottom, Left, Right)
   - The model will fill the new areas seamlessly
 
-**Advanced: External Mask Upload**:
-
-If you have a precise black-and-white mask prepared in tools like Photoshop:
-
-1. Check "Enable Mask Upload"
-2. Upload your mask image
-3. The mask will appear as a red semi-transparent overlay on the canvas for easy positioning
-4. You can still draw additional areas on the canvas if needed
-5. Both hand-drawn and uploaded masks will be merged during processing
-
 ### Describe (Prompt Reverse Engineering)
 
 Upload an image, and the system will analyze it and generate a descriptive prompt automatically. Two modes are available:

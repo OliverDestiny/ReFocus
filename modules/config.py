@@ -371,23 +371,17 @@ default_black_out_nsfw = get_config_item_or_set_default(
     default_value=False,
     validator=lambda x: isinstance(x, bool)
 )
+default_rembg_model = get_config_item_or_set_default(
+    key='default_rembg_model',
+    default_value='u2net',  # 保持与 rembg 库原生的默认行为一致
+    validator=lambda x: x in modules.flags.MASK_MODEL_CHOICES
+)
 default_inpaint_mask_model = get_config_item_or_set_default(
     key='default_inpaint_mask_model',
     default_value='isnet-general-use',
     validator=lambda x: x in modules.flags.inpaint_mask_models
 )
 
-default_inpaint_mask_cloth_category = get_config_item_or_set_default(
-    key='default_inpaint_mask_cloth_category',
-    default_value='full',
-    validator=lambda x: x in modules.flags.inpaint_mask_cloth_category
-)
-
-default_inpaint_mask_sam_model = get_config_item_or_set_default(
-    key='default_inpaint_mask_sam_model',
-    default_value='sam_vit_b_01ec64',
-    validator=lambda x: x in modules.flags.inpaint_mask_sam_model
-)
 
 config_dict["default_loras"] = default_loras = default_loras[:lora_count] + [['None', 1.0] for _ in range(lora_count - len(default_loras))]
 

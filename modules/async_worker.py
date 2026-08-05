@@ -132,7 +132,6 @@ def worker():
         outpaint_selections = args.pop()
         inpaint_input_image = args.pop()
         inpaint_additional_prompt = args.pop() or ''
-        inpaint_mask_image_upload = args.pop()
 
         disable_preview = args.pop()
         disable_intermediate_results = args.pop()
@@ -167,7 +166,6 @@ def worker():
         inpaint_engine = args.pop()
         inpaint_strength = args.pop()
         inpaint_respective_field = args.pop()
-        inpaint_mask_upload_checkbox = args.pop()
         invert_mask_checkbox = args.pop()
         inpaint_erode_or_dilate = args.pop()
 
@@ -370,43 +368,6 @@ def worker():
                     inpaint_mask = (inpaint_mask > 127).astype(np.uint8) * 255
 
                 inpaint_image = HWC3(inpaint_image)
-
-                # ---- upload mask ----
-                if inpaint_mask_upload_checkbox and inpaint_mask_image_upload is not None:
-                    # processing uploaded mask image
-                    if isinstance(inpaint_mask_image_upload, np.ndarray):
-                        if inpaint_mask_image_upload.ndim == 3:
-                            if inpaint_mask_image_upload.shape[2] == 3:
-                                uploaded_mask = cv2.cvtColor(inpaint_mask_image_upload, cv2.COLOR_RGB2GRAY)
-                            elif inpaint_mask_image_upload.shape[2] == 4:
-                                uploaded_mask = inpaint_mask_image_upload[:, :, 3]  # 使用 Alpha 通道
-                            else:
-                                uploaded_mask = inpaint_mask_image_upload[:, :, 0]
-                        else:
-                            uploaded_mask = inpaint_mask_image_upload
-
-                        # ensure uint8 to 0/1 logic
-                        if uploaded_mask.dtype != np.uint8:
-                            if uploaded_mask.max() <= 1.0:
-                                uploaded_mask = (uploaded_mask * 255).astype(np.uint8)
-                            else:
-                                uploaded_mask = uploaded_mask.astype(np.uint8)
-                        uploaded_mask = (uploaded_mask > 127).astype(np.uint8) * 255
-
-                        # resizing mask to fit image shape
-                        if uploaded_mask.shape[:2] != inpaint_image.shape[:2]:
-                            print(f'[Inpaint] WARNING: Mask size {uploaded_mask.shape[:2]} != image size {inpaint_image.shape[:2]}, resizing to match.')
-                            uploaded_mask = resample_image(uploaded_mask, inpaint_image.shape[1], inpaint_image.shape[0])
-                            print(f'[Inpaint] Resized uploaded mask to {uploaded_mask.shape}')
-
-                        # ---- merge hand and uploaded mask----
-                        if np.any(inpaint_mask > 127):
-                            inpaint_mask = cv2.bitwise_or(inpaint_mask, uploaded_mask)
-                            print('[Inpaint] Merged hand-drawn mask with uploaded mask')
-                        else:
-                            inpaint_mask = uploaded_mask
-                            print('[Inpaint] Using uploaded mask')
-
 
                 if isinstance(inpaint_image, np.ndarray) and isinstance(inpaint_mask, np.ndarray) \
                         and (np.any(inpaint_mask > 127) or len(outpaint_selections) > 0):

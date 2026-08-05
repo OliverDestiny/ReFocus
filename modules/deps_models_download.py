@@ -164,18 +164,25 @@ def ensure_facexlib_models():
             )
 
 
-def ensure_u2net_model():
-    """ensure rembg needed u2net.onnx exists"""
-    U2NET_HOME = os.path.join(os.path.expanduser('~'), '.u2net')
-    U2NET_PATH = os.path.join(U2NET_HOME, 'u2net.onnx')
-    if not os.path.exists(U2NET_PATH):
-        os.makedirs(U2NET_HOME, exist_ok=True)
-        _download_with_fallback(
-            mirror_url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/u2net.onnx',
-            official_url=None,  # rembg will automatically handle missing
-            model_dir=U2NET_HOME,
-            file_name='u2net.onnx'
-        )
+def ensure_rembg_models():
+    """
+    ensure rembg needed 4 models exists in ~/.u2net/
+    first time download all
+    """
+    target_dir = os.path.expanduser("~/.u2net")
+    os.makedirs(target_dir, exist_ok=True)
+
+    from modules.flags import MASK_MODEL_CHOICES
+
+    for fname in MASK_MODEL_CHOICES:
+        file_path = os.path.join(target_dir, fname + '.onnx')
+        if not os.path.exists(file_path):
+            _download_with_fallback(
+                mirror_url=f'https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/{fname}.onnx',
+                official_url=None,  # if mirror fail then rembg download
+                model_dir=target_dir,
+                file_name=fname + '.onnx'
+            )
 
 
 def ensure_blip_caption_model():

@@ -215,50 +215,6 @@ def convert_editor_to_legacy(editor_data):
     }
 
 
-def apply_uploaded_mask_to_editor(editor_data, mask_img):
-    """
-    convert uploaded mask to semi-transparent layer in ImageEditor
-    keep original background, only change layer
-    """
-    if mask_img is None or editor_data is None:
-        return gr.update()
-
-    bg = editor_data.get("background")
-    if bg is None:
-        bg = editor_data.get("composite")
-    if bg is None:
-        return gr.update()
-
-    # process mask array
-    if mask_img.dtype != np.uint8:
-        if mask_img.max() <= 1.0:
-            mask_img = (mask_img * 255).astype(np.uint8)
-        else:
-            mask_img = mask_img.astype(np.uint8)
-
-    # convert to 1 channel
-    if mask_img.ndim == 3:
-        mask = mask_img[:, :, 0]
-    else:
-        mask = mask_img
-
-    # Binarization
-    mask = (mask > 127).astype(np.uint8) * 255
-
-    # Adjust the size to match the background
-    H, W = bg.shape[:2]
-    if mask.shape[:2] != (H, W):
-        from modules.util import resample_image
-        mask = resample_image(mask, W, H)
-        print(f'[Inpaint] Resized uploaded mask to {mask.shape}')
-
-    # Create a semi-transparent red RGBA overlay layer with 70% opacity
-    overlay = np.zeros((mask.shape[0], mask.shape[1], 4), dtype=np.uint8)
-    overlay[:, :, 0] = 255
-    overlay[:, :, 3] = (mask * 0.7).astype(np.uint8)
-
-    return {"background": bg, "layers": [overlay]}
-
 # ========== Build UI ==========
 with shared.gradio_root:
     currentTask = gr.State(worker.AsyncTask(args=[]))
@@ -290,16 +246,17 @@ with shared.gradio_root:
             with gr.Tab("rembg"):
                 with gr.Column(scale=1):
                     rembg_input = gr.Image(label='Drag above image to here', sources=['upload'], type='filepath', scale=20)
+                    rembg_model = gr.Dropdown(label='Background Removal Model', choices=flags.MASK_MODEL_CHOICES, value=modules.config.default_rembg_model, interactive=True)
                     rembg_button = gr.Button(value="Remove Background", interactive=True, scale=1)
                 with gr.Column(scale=3):
                     rembg_output = gr.Image(label='rembg Output', interactive=False, height=380)
                 gr.Markdown("Powered by [🪄 rembg 2.0.53](https://github.com/danielgatis/rembg/releases/tag/v2.0.53)")
-            def rembg_callback(img):
+            def rembg_callback(img, model_name):
                 if img is None:
                     return None
                 from modules.rembg import rembg_run
-                return rembg_run(img)
-            rembg_button.click(rembg_callback, inputs=rembg_input, outputs=rembg_output, show_progress="full")
+                return rembg_run(img, model_name)
+            rembg_button.click(rembg_callback, inputs=[rembg_input, rembg_model], outputs=rembg_output, show_progress="full")
 
             with gr.Tab("Prompt Helper"):
                 gr.HTML(
@@ -547,64 +504,76 @@ with shared.gradio_root:
                                 gr.HTML('* Powered by Fooocus Inpaint Engine <a href="https://github.com/lllyasviel/Fooocus/discussions/414" target="_blank">\U0001F4D4 Document</a>')
                                 example_inpaint_prompts.click(lambda x: x[0], inputs=example_inpaint_prompts, outputs=inpaint_additional_prompt, show_progress=False, queue=False)
 
+                                show_mask_generation = gr.Checkbox(label='Show Mask Generation', value=False, container=False, elem_classes='min_check')
+
                             with gr.Column(visible=False) as inpaint_mask_generation_col:
-                                inpaint_mask_image = gr.Image(label='Mask Upload', sources=['upload'], type='numpy',
-                                                               height=500)
-
-                                inpaint_mask_image.upload(
-                                    apply_uploaded_mask_to_editor,
-                                    inputs=[inpaint_input_image, inpaint_mask_image],
-                                    outputs=inpaint_input_image,
-                                    queue=False,
-                                    show_progress=False
-                                )
-
-                                inpaint_mask_model = gr.Dropdown(label='Mask generation model',
-                                                                 choices=flags.inpaint_mask_models,
-                                                                 value=modules.config.default_inpaint_mask_model)
-                                inpaint_mask_cloth_category = gr.Dropdown(label='Cloth category',
-                                                             choices=flags.inpaint_mask_cloth_category,
-                                                             value=modules.config.default_inpaint_mask_cloth_category,
-                                                             visible=False)
-                                inpaint_mask_sam_prompt_text = gr.Textbox(label='Segmentation prompt', value='', visible=False)
-                                with gr.Accordion("Advanced options", visible=False, open=False) as inpaint_mask_advanced_options:
-                                    inpaint_mask_sam_model = gr.Dropdown(label='SAM model', choices=flags.inpaint_mask_sam_model, value=modules.config.default_inpaint_mask_sam_model)
-                                    inpaint_mask_sam_quant = gr.Checkbox(label='Quantization', value=False)
-                                    inpaint_mask_box_threshold = gr.Slider(label="Box Threshold", minimum=0.0, maximum=1.0, value=0.3, step=0.05)
-                                    inpaint_mask_text_threshold = gr.Slider(label="Text Threshold", minimum=0.0, maximum=1.0, value=0.25, step=0.05)
+                                inpaint_mask_model = gr.Dropdown(label='Mask generation model', choices=flags.MASK_MODEL_CHOICES, value=modules.config.default_inpaint_mask_model)
                                 generate_mask_button = gr.Button(value='Generate mask from image')
 
-                                def generate_mask(image, mask_model, cloth_category, sam_prompt_text, sam_model, sam_quant, box_threshold, text_threshold):
+                                def generate_mask(image, mask_model):
                                     from extras.inpaint_mask import generate_mask_from_image
+                                    import numpy as np
 
-                                    extras = {}
-                                    if mask_model == 'u2net_cloth_seg':
-                                        extras['cloth_category'] = cloth_category
-                                    elif mask_model == 'sam':
-                                        extras['sam_prompt_text'] = sam_prompt_text
-                                        extras['sam_model'] = sam_model
-                                        extras['sam_quant'] = sam_quant
-                                        extras['box_threshold'] = box_threshold
-                                        extras['text_threshold'] = text_threshold
+                                    if image is None:
+                                        return gr.update()
 
-                                    return generate_mask_from_image(image, mask_model, extras)
+                                    if isinstance(image, dict):
+                                        bg = image.get("background")
+                                        if bg is None:
+                                            bg = image.get("composite")
+                                    else:
+                                        bg = image
 
-                                generate_mask_button.click(fn=generate_mask,
-                                                           inputs=[
-                                                               inpaint_input_image, inpaint_mask_model,
-                                                               inpaint_mask_cloth_category,
-                                                               inpaint_mask_sam_prompt_text,
-                                                               inpaint_mask_sam_model,
-                                                               inpaint_mask_sam_quant,
-                                                               inpaint_mask_box_threshold,
-                                                               inpaint_mask_text_threshold
-                                                           ],
-                                                           outputs=inpaint_mask_image, show_progress=True, queue=True)
+                                    if bg is None:
+                                        return gr.update()
 
-                                inpaint_mask_model.change(lambda x: [gr.update(visible=x == 'u2net_cloth_seg'), gr.update(visible=x == 'sam'), gr.update(visible=x == 'sam')],
-                                                          inputs=inpaint_mask_model,
-                                                          outputs=[inpaint_mask_cloth_category, inpaint_mask_sam_prompt_text, inpaint_mask_advanced_options],
-                                                          queue=False, show_progress=False)
+                                    if bg.ndim == 3 and bg.shape[2] == 4:
+                                        bg_rgb = bg[:, :, :3]
+                                    else:
+                                        bg_rgb = bg
+
+                                    mask_result = generate_mask_from_image(bg_rgb, mask_model)
+                                    if mask_result is None:
+                                        return gr.update()
+
+                                    if mask_result.dtype != np.uint8:
+                                        if mask_result.max() <= 1.0:
+                                            mask_result = (mask_result * 255).astype(np.uint8)
+                                        else:
+                                            mask_result = mask_result.astype(np.uint8)
+
+                                    if mask_result.ndim == 3:
+                                        mask = mask_result[:, :, 0]
+                                    else:
+                                        mask = mask_result
+
+                                    mask = (mask > 127).astype(np.uint8) * 255
+
+                                    H, W = bg_rgb.shape[:2]
+                                    if mask.shape[:2] != (H, W):
+                                        from modules.util import resample_image
+                                        mask = resample_image(mask, W, H)
+                                        print(f'[Inpaint] Resized generated mask to {mask.shape}')
+
+                                    overlay = np.zeros((mask.shape[0], mask.shape[1], 4), dtype=np.uint8)
+                                    overlay[:, :, 0] = 255
+                                    overlay[:, :, 3] = (mask * 0.7).astype(np.uint8)
+                                    new_layers = [overlay]
+                                    return {"background": bg, "layers": new_layers, "composite": bg}
+
+                                generate_mask_button.click(
+                                    fn=generate_mask,
+                                    inputs=[
+                                        inpaint_input_image,
+                                        inpaint_mask_model,
+                                    ],
+                                    outputs=inpaint_input_image,
+                                    show_progress=True,
+                                    queue=True
+                                )
+
+
+                            show_mask_generation.change( lambda x: gr.update(visible=x), inputs=show_mask_generation, outputs=inpaint_mask_generation_col, queue=False, show_progress=False)
 
                     with gr.TabItem(label='Describe') as desc_tab:
                         with gr.Row():
@@ -890,17 +859,13 @@ with shared.gradio_root:
                                                             info='Positive value will make white area in the mask larger, '
                                                                  'negative value will make white area smaller.'
                                                                  '(default is 0, always process before any mask invert)')
-                        inpaint_mask_upload_checkbox = gr.Checkbox(label='Enable Mask Upload', value=False)
+
                         invert_mask_checkbox = gr.Checkbox(label='Invert Mask', value=False)
 
                         inpaint_ctrls = [debugging_inpaint_preprocessor, inpaint_disable_initial_latent, inpaint_engine,
                                          inpaint_strength, inpaint_respective_field,
-                                         inpaint_mask_upload_checkbox, invert_mask_checkbox, inpaint_erode_or_dilate]
+                                         invert_mask_checkbox, inpaint_erode_or_dilate]
 
-                        inpaint_mask_upload_checkbox.change(lambda x: [gr.update(visible=x)] * 2,
-                                                            inputs=inpaint_mask_upload_checkbox,
-                                                            outputs=[inpaint_mask_image, inpaint_mask_generation_col],
-                                                            queue=False, show_progress=False)
 
                     with gr.Tab(label='FreeU'):
                         freeu_enabled = gr.Checkbox(label='Enabled', value=False)
@@ -1042,7 +1007,7 @@ with shared.gradio_root:
         ctrls += [base_model, refiner_model, refiner_switch] + lora_ctrls
         ctrls += [input_image_checkbox, current_tab]
         ctrls += [uov_mode, uov_vary_mode, uov_scale, uov_fast, uov_ignore_prompt, uov_denoise_state, uov_input_image]
-        ctrls += [outpaint_selections, inpaint_data_legacy, inpaint_additional_prompt, inpaint_mask_image]
+        ctrls += [outpaint_selections, inpaint_data_legacy, inpaint_additional_prompt]
         ctrls += [disable_preview, disable_intermediate_results, black_out_nsfw]
         ctrls += [adm_scaler_positive, adm_scaler_negative, adm_scaler_end, adaptive_cfg]
         ctrls += [sampler_name, scheduler_name]
