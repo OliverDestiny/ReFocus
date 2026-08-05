@@ -61,6 +61,20 @@ ReFocus/
 
 ### Setup
 
+> **Note**: PyTorch is not included in `requirements.txt`. Please install it first according to your CUDA version:
+>
+> ```bash
+> # (for example)
+> # For CUDA 12.x
+> pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+> # For CUDA 11.8
+> pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+> # For CPU-only
+> pip install torch torchvision torchaudio
+> ```
+>
+> See [PyTorch official guide](https://pytorch.org/get-started/locally/) for more options.
+
 ```bash
 git clone https://github.com/OliverDestiny/ReFocus.git
 cd ReFocus
