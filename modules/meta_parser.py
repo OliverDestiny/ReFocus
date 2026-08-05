@@ -10,7 +10,7 @@ from PIL import Image
 
 import ReFocus_version
 import modules.config
-from modules.flags import MetadataScheme, Performance, Steps
+from modules.flags import MetadataScheme
 from modules.flags import lora_count, SAMPLERS, CIVITAI_NO_KARRAS
 from modules.util import quote, unquote, is_json, calculate_sha256
 
@@ -458,7 +458,6 @@ class A1111MetadataParser(MetadataParser):
         'raw_prompt': 'Raw prompt',
         'raw_negative_prompt': 'Raw negative prompt',
         'negative_prompt': 'Negative prompt',
-        'performance': 'Performance',
         'steps': 'Steps',
         'sampler': 'Sampler',
         'scheduler': 'Scheduler',
@@ -530,13 +529,6 @@ class A1111MetadataParser(MetadataParser):
         if 'raw_negative_prompt' in data:
             data['negative_prompt'] = data['raw_negative_prompt']
 
-        # try to load performance based on steps
-        if 'steps' in data and 'performance' not in data:
-            try:
-                data['performance'] = Performance[Steps(int(data['steps'])).name].value
-            except ValueError | KeyError:
-                pass
-
         if 'sampler' in data:
             data['sampler'] = data['sampler'].replace(' Karras', '')
             for k, v in SAMPLERS.items():
@@ -554,7 +546,7 @@ class A1111MetadataParser(MetadataParser):
 
         if 'lora_hashes' in data:
             lora_filenames = modules.config.lora_filenames.copy()
-            lora_filenames.remove(modules.config.downloading_sdxl_lcm_lora())
+            lora_filenames.remove(flags.LCM_LORA_FILENAME)
             for li, lora in enumerate(data['lora_hashes'].split(', ')):
                 lora_name, lora_hash, lora_weight = lora.split(': ')
                 for filename in lora_filenames:
@@ -588,7 +580,6 @@ class A1111MetadataParser(MetadataParser):
             self.fooocus_to_a1111['base_model']: Path(data['base_model']).stem,
             self.fooocus_to_a1111['base_model_hash']: self.base_model_hash,
 
-            self.fooocus_to_a1111['performance']: data['performance'],
             self.fooocus_to_a1111['scheduler']: scheduler,
             # workaround for multiline prompts
             self.fooocus_to_a1111['raw_prompt']: self.raw_prompt,
@@ -635,7 +626,7 @@ class FooocusMetadataParser(MetadataParser):
     def parse_json(self, metadata: dict) -> dict:
         model_filenames = modules.config.model_filenames.copy()
         lora_filenames = modules.config.lora_filenames.copy()
-        lora_filenames.remove(modules.config.downloading_sdxl_lcm_lora())
+        lora_filenames.remove(flags.LCM_LORA_FILENAME)
 
         for key, value in metadata.items():
             if value in ['', 'None']:

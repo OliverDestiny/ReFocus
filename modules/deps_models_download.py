@@ -1,5 +1,6 @@
 import os
 import modules.flags
+from modules.flags import LCM_LORA_FILENAME
 from modules.model_loader import load_file_from_url
 from modules.config import (
     path_inpaint,
@@ -75,11 +76,11 @@ def downloading_inpaint_models(v):
 
 def downloading_sdxl_lcm_lora():
     load_file_from_url(
-        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/sdxl_lcm_lora.safetensors',
+        url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/' + LCM_LORA_FILENAME,
         model_dir=path_loras,
-        file_name='sdxl_lcm_lora.safetensors'
+        file_name=LCM_LORA_FILENAME
     )
-    return 'sdxl_lcm_lora.safetensors'
+    return LCM_LORA_FILENAME
 
 
 def downloading_controlnet_canny():

@@ -53,7 +53,7 @@ def worker():
     from modules.util import safe_str, remove_empty_str, HWC3, resize_image, \
         get_image_shape_ceil, set_image_shape_ceil, get_shape_ceil, resample_image, erode_or_dilate
     from modules.upscaler import perform_upscale
-    from modules.flags import Performance, lora_count
+    from modules.flags import lora_count
     from modules.meta_parser import get_metadata_parser, MetadataScheme
 
     pid = os.getpid()

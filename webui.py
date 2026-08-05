@@ -793,8 +793,8 @@ with shared.gradio_root:
                                                       interactive=not modules.config.default_black_out_nsfw,
                                                       info='Disable preview during generation.')
                         disable_intermediate_results = gr.Checkbox(label='Disable Intermediate Results', 
-                                                      value=modules.config.default_performance == 'Extreme Speed',
-                                                      interactive=modules.config.default_performance != 'Extreme Speed',
+                                                      value=False,
+                                                      interactive=True,
                                                       info='Disable intermediate results during generation, only show final gallery.')
 
                         black_out_nsfw = gr.Checkbox(label='Black Out NSFW', value=modules.config.default_black_out_nsfw,

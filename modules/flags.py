@@ -1,4 +1,4 @@
-from enum import IntEnum, Enum
+from enum import Enum
 
 disabled = 'Disabled'
 enabled = 'Enabled'
@@ -98,65 +98,8 @@ metadata_scheme = [
 ]
 
 lora_count = 5
-lora_count_with_lcm = lora_count + 1
+
+LCM_LORA_FILENAME = 'sdxl_lcm_lora.safetensors'
 
 controlnet_image_count = 4
 
-
-class Steps(IntEnum):
-    QUALITY = 45
-    SPEED = 25
-    EXTREME_SPEED = 10
-    SPEED_A = 15
-    SPEED_B = 20
-    NORMAL_A = 30
-    NORMAL_B = 35
-    QUALITY_A = 40
-    QUALITY_B = 50
-
-
-class StepsUOV(IntEnum):
-    QUALITY = 36
-    SPEED = 18
-    EXTREME_SPEED = 8
-    SPEED_A = 12
-    SPEED_B = 16
-    NORMAL_A = 24
-    NORMAL_B = 28
-    QUALITY_A = 32
-    QUALITY_B = 40
-
-
-class Performance(Enum):
-    QUALITY = 'Quality'
-    SPEED = 'Speed'
-    EXTREME_SPEED = 'Extreme Speed'
-    SPEED_A = 'SPEED_A'
-    SPEED_B = 'SPEED_B'
-    NORMAL_A = 'NORMAL_A'
-    NORMAL_B = 'NORMAL_B'
-    QUALITY_A = 'QUALITY_A'
-    QUALITY_B = 'QUALITY_B'
-
-    @classmethod
-    def list(cls) -> list:
-        return list(map(lambda c: c.value, cls))
-
-    def steps(self) -> int | None:
-        return Steps[self.name].value if Steps[self.name] else None
-
-    def steps_uov(self) -> int | None:
-        return StepsUOV[self.name].value if Steps[self.name] else None
-
-
-performance_selections = [
-    ('Quality (45 steps)', Performance.QUALITY.value),
-    ('Speed (25 steps)', Performance.SPEED.value),
-    ('Extreme Speed (10 steps)', Performance.EXTREME_SPEED.value),
-    ('SPEED_A (15 steps)', Performance.SPEED_A.value),
-    ('SPEED_B (20 steps)', Performance.SPEED_B.value),
-    ('NORMAL_A (30 steps)', Performance.NORMAL_A.value),
-    ('NORMAL_B (35 steps)', Performance.NORMAL_B.value),
-    ('QUALITY_A (40 steps)', Performance.QUALITY_A.value),
-    ('QUALITY_B (50 steps)', Performance.QUALITY_B.value)
-]
