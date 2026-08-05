@@ -27,28 +27,34 @@ ReFocus is a Gradio-based UI for Stable Diffusion XL image generation, rebuilt f
 
 ```txt
 ReFocus/
-├── launch.py              # Entry point: FastAPI app + uvicorn
-├── args_manager.py        # CLI argument definitions
-├── webui.py               # Gradio UI definition (~1000+ lines)
-├── shared.py              # Shared state (gradio_root)
-├── modules/               # Core backend
-│   ├── config.py          # Config loading, model paths, presets
-│   ├── core.py            # Model loading, VAE encode/decode, ksampler
-│   ├── default_pipeline.py# Diffusion pipeline (base + refiner)
-│   ├── async_worker.py    # Async generation worker (threaded)
-│   ├── inpaint_worker.py  # Inpaint mask processing
-│   ├── deps_models_download.py # Model download utilities
-│   └── patch*.py          # Runtime patches (precision, CLIP, attention)
-├── extras/                # Optional extension modules
-│   ├── ip_adapter.py      # IP-Adapter / Image Prompt
-│   ├── interrogate.py     # BLIP captioning (Describe)
-│   ├── wd14tagger.py      # WD14 tagger (Describe/Anime)
-│   ├── inpaint_mask.py    # Mask generation (rembg, SAM)
+├── launch.py                    # Entry point: FastAPI app + uvicorn
+│
+├── args_manager.py              # CLI argument definitions
+├── webui.py                     # Gradio UI definition (~1000+ lines)
+├── shared.py                    # Shared state (gradio_root)
+├── ReFocus_version.py           # Version File
+│
+├── modules/                     # Core backend
+│   ├── config.py                # Config loading, model paths, presets
+│   ├── core.py                  # Model loading, VAE encode/decode, ksampler
+│   ├── default_pipeline.py      # Diffusion pipeline (base + refiner)
+│   ├── async_worker.py          # Async generation worker (threaded)
+│   ├── inpaint_worker.py        # Inpaint mask processing
+│   ├── deps_models_download.py  # Model download utilities
+│   └── patch*.py                # Runtime patches (precision, CLIP, attention)
+│
+├── extras/                      # Optional extension modules
+│   ├── ip_adapter.py            # IP-Adapter / Image Prompt
+│   ├── interrogate.py           # BLIP captioning (Describe)
+│   ├── wd14tagger.py            # WD14 tagger (Describe/Anime)
+│   ├── inpaint_mask.py          # Mask generation using rembg (4 models: isnet-general-use, u2net, u2net_human_seg, isnet-anime)
 │   └── ...
-├── ldm_patched/           # ComfyUI-based diffusion core (GPL v3)
-├── prompt_helper/         # Prompt Helper sub-application
-│   ├── app.py             # FastAPI sub-app
-│   └── static/            # Frontend assets (Vue app)
+│
+├── ldm_patched/                 # ComfyUI-based diffusion core (GPL v3)
+│
+├── prompt_helper/               # Prompt Helper sub-application
+│   ├── app.py                   # FastAPI sub-app
+│   └── static/                  # Frontend assets (Vue app)
 └── ...
 ```
 
@@ -127,7 +133,19 @@ Manages:
 
 ### `deps_models_download.py`
 
-Centralized model download utility. All external model downloads route through this module.
+Centralized model download utility. All external model downloads route through this module.  
+New functions:
+
+- `ensure_rembg_models()`: Downloads the 4 core rembg models (`isnet-general-use`, `u2net`, `u2net_human_seg`, `isnet-anime`) to `~/.u2net/`.
+- `LCM_LORA_FILENAME` constant defined in `flags.py` for consistent referencing.
+
+### `flags.py`
+
+Defines global constants and enumerations. Recent additions:
+
+- `MASK_MODEL_CHOICES`: List of 4 rembg model names (single source of truth).
+- `LCM_LORA_FILENAME`: Filename constant for LCM LoRA (used across download and metadata parsing).
+- Removed obsolete `Performance`, `Steps`, `StepsUOV` enums and related selections.
 
 ---
 

@@ -10,22 +10,63 @@ That's it. All advanced features are optional. You only need a prompt to get sta
 
 ---
 
+## Tools
+
+Three standalone tools are available as tabs at the top of the main interface.
+
+### Photopea
+
+**Photopea** is an online professional image editor (similar to Photoshop). You can use it without leaving ReFocus for:
+
+- Cropping and resizing
+- Layers and masks
+- Color correction and retouching
+
+> An internet connection is required for this feature.
+
+### rembg
+
+The **rembg** tab provides one-click background removal:
+
+1. Upload an image
+2. Select a removal model from the dropdown
+3. Click "Remove Background"
+
+The available models are the same four as in "Automatic Mask Generation":
+
+- **isnet-general-use**: General-purpose model, suitable for most scenes (default)
+- **u2net**: Classic salient object detection model, fast
+- **u2net_human_seg**: Specialized for human segmentation, ideal for portraits
+- **isnet-anime**: Optimized for anime/illustration style images
+
+### Prompt Helper
+
+The **Prompt Helper** tab is based on `sd-webui-prompt-all-in-one-app`, providing a visual tag-based prompt building experience:
+
+- Browse common prompt tags by category, click to add them to the builder
+- Search and filter specific prompt styles
+- Translation and format optimization between Chinese and English
+
+The tool runs in a separate panel. You can combine prompts in the builder, then use the built-in "Copy to Clipboard" button to paste into the main prompt box.
+
+---
+
 ## Controlling Image Generation
 
-For more control over the generation process, check **Input Image**. Four tool panels will expand below.
+For more control, check **Input Image** — four tool panels will expand below.
 
 ### Upscale or Variation (UOV)
 
 Upload an image, then you can:
 
-- **Vary**: Generate a similar but slightly different version of the original image
+- **Vary**: Generate a similar but slightly different version
   - Subtle → Minor adjustments
   - Strong → More dramatic changes
   - Custom → Manually control the variation strength (0–1, higher = more change)
 
 - **Upscale**: Enlarge the image while adding details
   - Select a scale factor (0.25x – 4x)
-  - Enable "Fast Mode" to upscale without diffusion sampling (faster, but fewer details added)
+  - Enable "Fast Mode" to upscale without diffusion sampling (faster, fewer details)
   - Check "Ignore Prompt" to use an empty prompt, letting the model explore freely — great for creative inspiration
 
 ### Image Prompt
@@ -50,6 +91,17 @@ Draw white areas (mask) on the image to let the model regenerate those regions.
 - **Outpaint**: Expand the canvas outward with automatically generated content
   - Select expansion directions (Top, Bottom, Left, Right)
   - The model will fill the new areas seamlessly
+
+### Automatic Mask Generation
+
+Check **"Show Mask Generation"** to let the system automatically analyze the image and generate a mask. Four models are available:
+
+- **isnet-general-use**: General-purpose model, suitable for most scenes (default)
+- **u2net**: Classic salient object detection model, fast
+- **u2net_human_seg**: Specialized for human segmentation, ideal for portraits
+- **isnet-anime**: Optimized for anime/illustration style images
+
+Select a model and click **"Generate mask from image"**. The mask will be overlaid on the image. You can still manually adjust the mask (paint or erase) before performing the inpaint operation.
 
 ### Describe (Prompt Reverse Engineering)
 

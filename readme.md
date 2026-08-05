@@ -14,7 +14,7 @@ Rebuilt from [DeFooocus](https://github.com/ehristoforu/DeFooocus) with signific
 - **Clean, minimal UI**: Prompt-focused workflow, no technical clutter.
 - **Modernized backend**: Gradio 6.20.0, refactored codebase, simplified model loading.
 - **SDXL support**: Base model supports SDXL only. Refiner supports SDXL or SD 1.5.
-- **Image control tools**: Upscale / Vary, Image Prompt (IP-Adapter, Canny, CPDS, FaceSwap), Inpaint / Outpaint with external mask upload, Describe (BLIP / WD14 tagger), Metadata loading.
+- **Image control tools**: Upscale / Vary, Image Prompt (IP-Adapter, Canny, CPDS, FaceSwap), Inpaint / Outpaint with built-in mask generation (4 models) and external mask upload, Describe (BLIP / WD14 tagger), Metadata loading.
 - **Integrated tools**: Prompt Helper (sd-webui-prompt-all-in-one), Photopea (online editor, requires internet), rembg background removal.
 
 ---
