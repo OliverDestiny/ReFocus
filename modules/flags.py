@@ -78,7 +78,7 @@ MASK_MODEL_CHOICES = [
 
 inpaint_mask_models = MASK_MODEL_CHOICES
 
-inpaint_option_default = 'Inpaint or Outpaint (default)'
+inpaint_option_default = 'Inpaint (default)'
 inpaint_option_detail = 'Improve Detail (face, hand, eyes, etc.)'
 inpaint_option_modify = 'Modify Content (add objects, change background, etc.)'
 inpaint_options = [inpaint_option_default, inpaint_option_detail, inpaint_option_modify]

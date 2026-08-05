@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from args_manager import args
-from webui import shared, get_custom_head
+from webui import gradio_root, get_custom_head
 from gradio import mount_gradio_app
 from modules import config, html, constants
 
@@ -60,7 +60,7 @@ app.mount("/prompt-helper", prompt_helper_app)
 # -----------------------------
 mount_gradio_app(
     app,
-    shared.gradio_root,
+    gradio_root,
     path="/",
     favicon_path="assets/favicon.png",
     auth=None,

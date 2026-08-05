@@ -30,7 +30,6 @@ def worker():
     import numpy as np
     import torch
     import time
-    import shared
     import cv2
     import modules.default_pipeline as pipeline
     import modules.core as core
@@ -58,21 +57,6 @@ def worker():
 
     pid = os.getpid()
     print(f'Started worker with PID {pid}')
-
-    try:
-        async_gradio_app = shared.gradio_root
-        local_url = getattr(async_gradio_app, 'local_url', None)
-        if local_url:
-            flag = f'App started successful. Use the app with {local_url}'
-        else:
-            flag = 'App started successful.'
-        if async_gradio_app.share:
-            share_url = getattr(async_gradio_app, 'share_url', None)
-            if share_url:
-                flag += f' or {share_url}'
-        print(flag)
-    except Exception as e:
-        print(e)
 
     def progressbar(async_task, number, text):
         print(f'[ReFocus] {text}')
@@ -595,31 +579,32 @@ def worker():
             print(f'Final resolution is {str((height, width))}.')
 
         if 'inpaint' in goals:
-            if len(outpaint_selections) > 0:
-                H, W, C = inpaint_image.shape
-                if 'top' in outpaint_selections:
-                    inpaint_image = np.pad(inpaint_image, [[int(H * 0.3), 0], [0, 0], [0, 0]], mode='edge')
-                    inpaint_mask = np.pad(inpaint_mask, [[int(H * 0.3), 0], [0, 0]], mode='constant',
-                                          constant_values=255)
-                if 'bottom' in outpaint_selections:
-                    inpaint_image = np.pad(inpaint_image, [[0, int(H * 0.3)], [0, 0], [0, 0]], mode='edge')
-                    inpaint_mask = np.pad(inpaint_mask, [[0, int(H * 0.3)], [0, 0]], mode='constant',
-                                          constant_values=255)
+            # OUTPAINT: waiting for refactor (function removed, keep codes for reference in future)
+            # if len(outpaint_selections) > 0:
+            #     H, W, C = inpaint_image.shape
+            #     if 'top' in outpaint_selections:
+            #         inpaint_image = np.pad(inpaint_image, [[int(H * 0.3), 0], [0, 0], [0, 0]], mode='edge')
+            #         inpaint_mask = np.pad(inpaint_mask, [[int(H * 0.3), 0], [0, 0]], mode='constant',
+            #                               constant_values=255)
+            #     if 'bottom' in outpaint_selections:
+            #         inpaint_image = np.pad(inpaint_image, [[0, int(H * 0.3)], [0, 0], [0, 0]], mode='edge')
+            #         inpaint_mask = np.pad(inpaint_mask, [[0, int(H * 0.3)], [0, 0]], mode='constant',
+            #                               constant_values=255)
 
-                H, W, C = inpaint_image.shape
-                if 'left' in outpaint_selections:
-                    inpaint_image = np.pad(inpaint_image, [[0, 0], [int(H * 0.3), 0], [0, 0]], mode='edge')
-                    inpaint_mask = np.pad(inpaint_mask, [[0, 0], [int(H * 0.3), 0]], mode='constant',
-                                          constant_values=255)
-                if 'right' in outpaint_selections:
-                    inpaint_image = np.pad(inpaint_image, [[0, 0], [0, int(H * 0.3)], [0, 0]], mode='edge')
-                    inpaint_mask = np.pad(inpaint_mask, [[0, 0], [0, int(H * 0.3)]], mode='constant',
-                                          constant_values=255)
+            #     H, W, C = inpaint_image.shape
+            #     if 'left' in outpaint_selections:
+            #         inpaint_image = np.pad(inpaint_image, [[0, 0], [int(H * 0.3), 0], [0, 0]], mode='edge')
+            #         inpaint_mask = np.pad(inpaint_mask, [[0, 0], [int(H * 0.3), 0]], mode='constant',
+            #                               constant_values=255)
+            #     if 'right' in outpaint_selections:
+            #         inpaint_image = np.pad(inpaint_image, [[0, 0], [0, int(H * 0.3)], [0, 0]], mode='edge')
+            #         inpaint_mask = np.pad(inpaint_mask, [[0, 0], [0, int(H * 0.3)]], mode='constant',
+            #                               constant_values=255)
 
-                inpaint_image = np.ascontiguousarray(inpaint_image.copy())
-                inpaint_mask = np.ascontiguousarray(inpaint_mask.copy())
-                inpaint_strength = 1.0
-                inpaint_respective_field = 1.0
+            #     inpaint_image = np.ascontiguousarray(inpaint_image.copy())
+            #     inpaint_mask = np.ascontiguousarray(inpaint_mask.copy())
+            #     inpaint_strength = 1.0
+            #     inpaint_respective_field = 1.0
 
             denoising_strength = inpaint_strength
 

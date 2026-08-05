@@ -3,7 +3,6 @@ import random
 import os
 import json
 import time
-import shared
 import modules.config
 import ReFocus_version
 import modules.html
@@ -162,7 +161,7 @@ title = f'ReFocus {ReFocus_version.version}'
 if isinstance(args_manager.args.preset, str):
     title += ' ' + args_manager.args.preset
 
-shared.gradio_root = gr.Blocks(title=title).queue()
+gradio_root = gr.Blocks(title=title).queue()
 
 # ========== convert ImageEditor output to legacy to meet backend ==========
 def convert_editor_to_legacy(editor_data):
@@ -216,7 +215,7 @@ def convert_editor_to_legacy(editor_data):
 
 
 # ========== Build UI ==========
-with shared.gradio_root:
+with gradio_root:
     currentTask = gr.State(worker.AsyncTask(args=[]))
     with gr.Row():
         with gr.Column(scale=2):
@@ -271,7 +270,7 @@ with shared.gradio_root:
 
                     default_prompt = modules.config.default_prompt
                     if isinstance(default_prompt, str) and default_prompt != '':
-                        shared.gradio_root.load(lambda: default_prompt, outputs=prompt)
+                        gradio_root.load(lambda: default_prompt, outputs=prompt)
 
                 with gr.Column(scale=3, min_width=0):
                     generate_button = gr.Button(value="Generate", elem_classes='type_row', elem_id='generate_button', visible=True)
@@ -483,7 +482,7 @@ with shared.gradio_root:
 
                         ip_advanced.change(ip_advance_checked, inputs=ip_advanced, outputs=ip_ad_cols, queue=False, show_progress=False)
 
-                    with gr.TabItem(label='Inpaint or Outpaint') as inpaint_tab:
+                    with gr.TabItem(label='Inpaint') as inpaint_tab:
                         with gr.Row():
                             with gr.Column():
                                 inpaint_input_image = gr.ImageEditor(
@@ -496,12 +495,11 @@ with shared.gradio_root:
                                 inpaint_data_legacy = gr.State(value=None)
                                 inpaint_mode = gr.Dropdown(choices=modules.flags.inpaint_options, value=modules.flags.inpaint_option_default, label='Method')
                                 inpaint_additional_prompt = gr.Textbox(placeholder="Describe what you want to inpaint.", elem_id='inpaint_additional_prompt', label='Inpaint Additional Prompt', visible=False)
-                                outpaint_selections = gr.CheckboxGroup(choices=['Left', 'Right', 'Top', 'Bottom'], value=[], label='Outpaint Direction')
                                 example_inpaint_prompts = gr.Dataset(samples=modules.config.example_inpaint_prompts,
                                                                      label='Additional Prompt Quick List',
                                                                      components=[inpaint_additional_prompt],
                                                                      visible=False)
-                                gr.HTML('* Powered by Fooocus Inpaint Engine <a href="https://github.com/lllyasviel/Fooocus/discussions/414" target="_blank">\U0001F4D4 Document</a>')
+                                # gr.HTML('* Powered by Fooocus Inpaint Engine <a href="https://github.com/lllyasviel/Fooocus/discussions/414" target="_blank">\U0001F4D4 Document</a>')
                                 example_inpaint_prompts.click(lambda x: x[0], inputs=example_inpaint_prompts, outputs=inpaint_additional_prompt, show_progress=False, queue=False)
 
                                 show_mask_generation = gr.Checkbox(label='Show Mask Generation', value=False, container=False, elem_classes='min_check')
@@ -701,7 +699,7 @@ with shared.gradio_root:
                     return gr.update(value=f'<a href="file={get_current_html_path()}" target="_blank">\U0001F4DA History Log</a>')
 
                 history_link = gr.HTML()
-                shared.gradio_root.load(update_history_link, outputs=history_link, queue=False, show_progress=False)
+                gradio_root.load(update_history_link, outputs=history_link, queue=False, show_progress=False)
 
             with gr.Tab(label='Models'):
                 with gr.Group():
@@ -946,33 +944,30 @@ with shared.gradio_root:
 
             if mode == modules.flags.inpaint_option_detail:
                 return [
-                    gr.update(visible=True, value=''),
-                    gr.update(visible=False, value=[]),
-                    gr.update(visible=True),
-                    gr.update(value=False),
-                    gr.update(value='None'),
-                    gr.update(value=0.5),
-                    gr.update(value=0.0)
+                    gr.update(visible=True, value=''),          # inpaint_additional_prompt
+                    gr.update(visible=True),                    # example_inpaint_prompts
+                    gr.update(value=False),                     # inpaint_disable_initial_latent
+                    gr.update(value='None'),                    # inpaint_engine
+                    gr.update(value=0.5),                       # inpaint_strength
+                    gr.update(value=0.0)                        # inpaint_respective_field
                 ]
             elif mode == modules.flags.inpaint_option_modify:
                 return [
-                    gr.update(visible=True, value=''),
-                    gr.update(visible=False, value=[]),
-                    gr.update(visible=False),
-                    gr.update(value=False),
+                    gr.update(visible=True, value=''),          # inpaint_additional_prompt
+                    gr.update(visible=False),                   # example_inpaint_prompts
+                    gr.update(value=False),                     # inpaint_disable_initial_latent
                     gr.update(value=modules.config.default_inpaint_engine_version),
-                    gr.update(value=1.0),
-                    gr.update(value=0.0)
+                    gr.update(value=1.0),                       # inpaint_strength
+                    gr.update(value=0.0)                        # inpaint_respective_field
                 ]
-            else:  # 默认 'Inpaint or Outpaint (default)'
+            else:  # 'Inpaint (default)'
                 return [
-                    gr.update(visible=False, value=''),
-                    gr.update(visible=True, value=[]),
-                    gr.update(visible=False),
-                    gr.update(value=False),
+                    gr.update(visible=False, value=''),         # inpaint_additional_prompt
+                    gr.update(visible=False),                   # example_inpaint_prompts
+                    gr.update(value=False),                     # inpaint_disable_initial_latent
                     gr.update(value=modules.config.default_inpaint_engine_version),
-                    gr.update(value=1.0),
-                    gr.update(value=0.618)
+                    gr.update(value=1.0),                       # inpaint_strength
+                    gr.update(value=0.618)                      # inpaint_respective_field
                 ]
 
         inpaint_mode.change(
@@ -980,7 +975,6 @@ with shared.gradio_root:
             inputs=inpaint_mode,
             outputs=[
                 inpaint_additional_prompt,
-                outpaint_selections,
                 example_inpaint_prompts,
                 inpaint_disable_initial_latent,
                 inpaint_engine,
@@ -1007,7 +1001,7 @@ with shared.gradio_root:
         ctrls += [base_model, refiner_model, refiner_switch] + lora_ctrls
         ctrls += [input_image_checkbox, current_tab]
         ctrls += [uov_mode, uov_vary_mode, uov_scale, uov_fast, uov_ignore_prompt, uov_denoise_state, uov_input_image]
-        ctrls += [outpaint_selections, inpaint_data_legacy, inpaint_additional_prompt]
+        ctrls += [gr.State([]), inpaint_data_legacy, inpaint_additional_prompt]
         ctrls += [disable_preview, disable_intermediate_results, black_out_nsfw]
         ctrls += [adm_scaler_positive, adm_scaler_negative, adm_scaler_end, adaptive_cfg]
         ctrls += [sampler_name, scheduler_name]
