@@ -1,3 +1,7 @@
+# This file is part of ReFocus.
+# Original work Copyright (c) 2022, salesforce.com, inc. By Junnan Li
+# Modified and distributed under the terms of the License.
+
 '''
  * Copyright (c) 2022, salesforce.com, inc.
  * All rights reserved.
@@ -36,18 +40,110 @@ from transformers.modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from transformers.modeling_utils import (
-    PreTrainedModel,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 from transformers.models.bert.configuration_bert import BertConfig
-
+from transformers.generation import GenerationMixin
 
 logger = logging.get_logger(__name__)
 
+# ===== diy apply_chunking_to_forward (replace transformers 5.x removed function) =====
+def apply_chunking_to_forward(forward_fn, chunk_size, chunk_dim, *input_tensors):
+    """
+    This function chunks the input tensors into smaller chunks and applies the forward_fn to each chunk.
+    It replicates the behavior of the original transformers.modeling_utils.apply_chunking_to_forward,
+    which was removed in transformers 5.x.
+    """
+    if chunk_size is None or chunk_size <= 0:
+        return forward_fn(*input_tensors)
+
+    assert len(input_tensors) > 0, "At least one input tensor must be provided"
+
+    # Find the tensor with the chunk_dim dimension
+    tensor = input_tensors[0]
+    dim_size = tensor.shape[chunk_dim]
+
+    # If the dimension size is less than or equal to chunk_size, no chunking needed
+    if dim_size <= chunk_size:
+        return forward_fn(*input_tensors)
+
+    # Split the tensors along the chunk_dim
+    chunked_inputs = []
+    for t in input_tensors:
+        if t.shape[chunk_dim] != dim_size:
+            raise ValueError(
+                f"All input tensors must have the same dimension size along chunk_dim. "
+                f"Got {t.shape[chunk_dim]} vs {dim_size}"
+            )
+        chunks = t.chunk((dim_size + chunk_size - 1) // chunk_size, dim=chunk_dim)
+        chunked_inputs.append(chunks)
+
+    # Apply forward_fn to each chunk
+    outputs = []
+    for i in range(len(chunked_inputs[0])):
+        chunk_args = [chunked_inputs[j][i] for j in range(len(chunked_inputs))]
+        outputs.append(forward_fn(*chunk_args))
+
+    # Concatenate the outputs along the chunk_dim
+    if isinstance(outputs[0], tuple):
+        return tuple(torch.cat([out[i] for out in outputs], dim=chunk_dim) for i in range(len(outputs[0])))
+    else:
+        return torch.cat(outputs, dim=chunk_dim)
+
+from transformers.modeling_utils import PreTrainedModel
+
+def find_pruneable_heads_and_indices(heads, n_heads, head_size, already_pruned_heads):
+    """
+    Finds the heads and their indices taking into account already pruned heads.
+
+    Args:
+        heads: list of ints, heads to prune
+        n_heads: int, total number of heads
+        head_size: int, size of each head
+        already_pruned_heads: set of ints, already pruned heads
+
+    Returns:
+        index: torch.LongTensor, indices of heads to keep
+        heads_to_prune: set of ints, heads to prune
+    """
+    heads_to_prune = set(heads) - already_pruned_heads
+    # calculate all index of heads to keep
+    heads_to_keep = [i for i in range(n_heads) if i not in heads_to_prune]
+    # construct index tensor
+    index = torch.tensor(heads_to_keep, dtype=torch.long)
+    return index, heads_to_prune
+
+def prune_linear_layer(layer, index, dim=0):
+    """
+    Prune a linear layer to keep only the indices in the index.
+
+    Used to remove heads.
+    """
+    # get weight and bias
+    weight = layer.weight
+    bias = None if layer.bias is None else layer.bias
+    # choose index according to dim
+    if dim == 0:
+        new_weight = weight.index_select(0, index)
+        if bias is not None:
+            new_bias = bias.index_select(0, index)
+        else:
+            new_bias = None
+    elif dim == 1:
+        new_weight = weight.index_select(1, index)
+        new_bias = bias  # keep bias
+    else:
+        raise ValueError("dim must be 0 or 1")
+    # vreate new linear layer
+    new_layer = torch.nn.Linear(
+        in_features=weight.shape[1] if dim == 0 else len(index),
+        out_features=len(index) if dim == 0 else weight.shape[0],
+        bias=bias is not None,
+    )
+    new_layer.weight = torch.nn.Parameter(new_weight)
+    if bias is not None:
+        new_layer.bias = torch.nn.Parameter(new_bias)
+    return new_layer
 
 class BertEmbeddings(nn.Module):
     """Construct the embeddings from word and position embeddings."""
@@ -554,6 +650,12 @@ class BertPreTrainedModel(PreTrainedModel):
     config_class = BertConfig
     base_model_prefix = "bert"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _tied_weights_keys={}
+
+    @property
+    def all_tied_weights_keys(self):
+        # transformers 5.x: _tied_weights_keys replaces all_tied_weights_keys
+        return getattr(self, '_tied_weights_keys', [])
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -566,6 +668,15 @@ class BertPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
+
+    def get_head_mask(self, head_mask, num_hidden_layers, is_attention_chunked=False):
+        """
+        Prepare the head mask if needed.
+        """
+        if head_mask is not None:
+            return [head_mask] * num_hidden_layers
+        else:
+            return [None] * num_hidden_layers
 
 
 class BertModel(BertPreTrainedModel):
@@ -590,6 +701,20 @@ class BertModel(BertPreTrainedModel):
 
         self.init_weights()
  
+    def invert_attention_mask(self, attention_mask):
+        """
+        Override the deprecated methods of the parent class and provide a local implementation to avoid warnings.
+        This method extends the 2D/3D attention mask to a 4D mask and converts it to negative infinity.
+        """
+        if attention_mask.dim() == 2:
+            # shape: (batch_size, seq_len) -> (batch_size, 1, 1, seq_len)
+            attention_mask = attention_mask[:, None, None, :]
+        elif attention_mask.dim() == 3:
+            # shape: (batch_size, seq_len_q, seq_len_k) -> (batch_size, 1, seq_len_q, seq_len_k)
+            attention_mask = attention_mask[:, None, :, :]
+        attention_mask = attention_mask.to(dtype=self.dtype)  # Keep consistency with the model dtype
+        attention_mask = (1.0 - attention_mask) * -10000.0
+        return attention_mask
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -808,7 +933,7 @@ class BertModel(BertPreTrainedModel):
 
 
 
-class BertLMHeadModel(BertPreTrainedModel):
+class BertLMHeadModel(BertPreTrainedModel, GenerationMixin):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]

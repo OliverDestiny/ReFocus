@@ -25,7 +25,6 @@ from ldm_patched.modules.samplers import calc_cond_uncond_batch
 from ldm_patched.k_diffusion.sampling import BatchedBrownianTree
 from ldm_patched.ldm.modules.diffusionmodules.openaimodel import forward_timestep_embed, apply_control
 from modules.patch_precision import patch_all_precision
-from modules.patch_clip import patch_all_clip
 
 
 class PatchSettings:
@@ -491,7 +490,6 @@ def patch_all():
         ldm_patched.modules.model_management.OOM_EXCEPTION = Exception
 
     patch_all_precision()
-    patch_all_clip()
 
     if not hasattr(ldm_patched.modules.model_management, 'load_models_gpu_origin'):
         ldm_patched.modules.model_management.load_models_gpu_origin = ldm_patched.modules.model_management.load_models_gpu

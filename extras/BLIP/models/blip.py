@@ -184,11 +184,23 @@ def blip_feature_extractor(pretrained='',**kwargs):
     return model        
 
 def init_tokenizer():
-    tokenizer_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "bert_tokenizer")
-    tokenizer = BertTokenizer.from_pretrained(tokenizer_path)
-    tokenizer.add_special_tokens({'bos_token':'[DEC]'})
-    tokenizer.add_special_tokens({'additional_special_tokens':['[ENC]']})       
-    tokenizer.enc_token_id = tokenizer.additional_special_tokens_ids[0]  
+    try:
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', local_files_only=True)
+        print("[BLIP] Loaded bert-base-uncased from local cache.")
+    except OSError:
+        print("[BLIP] Local cache not found, downloading bert-base-uncased from Hugging Face...")
+        try:
+            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        except Exception as e:
+            raise RuntimeError(
+                "Failed to download bert-base-uncased. Please check your internet connection "
+                "and try again. If you prefer offline, download the model manually and place it "
+                "in the Hugging Face cache directory."
+            ) from e
+
+    tokenizer.add_special_tokens({'bos_token':'[DEC]', 'additional_special_tokens':['[ENC]', '[DEC]']})
+    tokenizer.enc_token_id = tokenizer.convert_tokens_to_ids('[ENC]')
+    tokenizer.dec_token_id = tokenizer.convert_tokens_to_ids('[DEC]')
     return tokenizer
 
 
