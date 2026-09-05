@@ -170,7 +170,7 @@ def preprocess(img, ip_adapter_path):
 
     ldm_patched.modules.model_management.load_model_gpu(clip_vision.patcher)
     pixel_values = clip_preprocess(numpy_to_pytorch(img).to(clip_vision.load_device))
-    outputs = clip_vision.model(pixel_values=pixel_values, output_hidden_states=True)
+    out = clip_vision.model(pixel_values=pixel_values, intermediate_output=-2)
 
     ip_adapter = entry['ip_adapter']
     ip_layers = entry['ip_layers']
@@ -178,9 +178,9 @@ def preprocess(img, ip_adapter_path):
     ip_unconds = entry['ip_unconds']
 
     if ip_adapter.plus:
-        cond = outputs.hidden_states[-2]
+        cond = out[1]
     else:
-        cond = outputs.image_embeds
+        cond = out[2]
 
     cond = cond.to(device=ip_adapter.load_device, dtype=ip_adapter.dtype)
 
