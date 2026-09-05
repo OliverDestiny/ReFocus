@@ -408,9 +408,9 @@ def worker():
             prompts = remove_empty_str([safe_str(p) for p in prompt.splitlines()], default='')
             negative_prompts = remove_empty_str([safe_str(p) for p in negative_prompt.splitlines()], default='')
 
-            if uov_ignore_prompt:
+            if uov_ignore_prompt and input_image_checkbox and uov_input_image is not None:
                 prompts = ['']
-                negative_prompts = [''] 
+                negative_prompts = ['']
 
             prompt = prompts[0]
             negative_prompt = negative_prompts[0]

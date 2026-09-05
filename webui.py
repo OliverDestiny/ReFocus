@@ -612,6 +612,12 @@ with gradio_root:
 
             input_image_checkbox.change(lambda x: gr.update(visible=x), inputs=input_image_checkbox,
                                         outputs=image_input_panel, queue=False, show_progress=False, js=switch_js)
+            input_image_checkbox.change(
+                lambda checked: gr.update(value=False) if not checked else gr.update(),
+                inputs=input_image_checkbox,
+                outputs=uov_ignore_prompt,
+                queue=False, show_progress=False
+            )
             ip_advanced.change(lambda: None, queue=False, show_progress=False, js=down_js)
 
             current_tab = gr.Textbox(value='uov', visible=False)
