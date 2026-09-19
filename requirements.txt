@@ -17,6 +17,14 @@ tokenizers==0.22.2
 einops==0.8.0
 torchsde==0.2.6
 
+# Required by the vendored ComfyUI core in ./comfy.
+# Both are imported unconditionally by comfy/ (no fallback), so they cannot be omitted.
+# Pinned exactly to the versions the vendored core was taken from; do NOT float them,
+# they are versioned independently of ComfyUI and have had breaking changes within
+# the same minor line.
+comfy-kitchen==0.2.31
+comfy-aimdo==0.4.13
+
 # ================================
 # Computer Vision & Image Processing
 # ================================
