@@ -5,7 +5,6 @@
 import threading
 import os
 from modules.patch import PatchSettings, patch_settings, patch_all
-from pathlib import Path
 
 patch_all()
 
@@ -36,13 +35,12 @@ def worker():
     import modules.flags as flags
     import modules.config
     import modules.arg_schema as arg_schema
+    import modules.controlnet_registry as controlnet_registry
     import modules.patch
     import ldm_patched.modules.model_management
-    import extras.preprocessors as preprocessors
     import modules.inpaint_worker as inpaint_worker
     import modules.constants as constants
     import extras.ip_adapter as ip_adapter
-    import extras.face_crop
     import modules.deps_models_download as downloader
     import ReFocus_version
     import args_manager
@@ -50,7 +48,7 @@ def worker():
     from modules.censor import censor_batch
 
     from modules.private_logger import log
-    from modules.util import safe_str, remove_empty_str, HWC3, resize_image, \
+    from modules.util import safe_str, remove_empty_str, HWC3, \
         get_image_shape_ceil, set_image_shape_ceil, get_shape_ceil, resample_image, erode_or_dilate
     from modules.upscaler import perform_upscale
     from modules.flags import lora_count
@@ -168,14 +166,14 @@ def worker():
         save_metadata_to_images = raw['save_metadata_to_images'] if not args_manager.args.disable_metadata else False
         metadata_scheme = MetadataScheme(raw['metadata_scheme']) if not args_manager.args.disable_metadata else MetadataScheme.FOOOCUS
 
-        cn_tasks = {x: [] for x in flags.ip_list}
+        cn_tasks = controlnet_registry.new_task_map()
         for i in range(flags.controlnet_image_count):
             cn_img = raw[f'cn_image_{i + 1}']
             cn_stop = raw[f'cn_stop_{i + 1}']
             cn_weight = raw[f'cn_weight_{i + 1}']
             cn_type = raw[f'cn_type_{i + 1}']
             if cn_img is not None:
-                cn_tasks[cn_type].append([cn_img, cn_stop, cn_weight])
+                cn_tasks[cn_type].append(controlnet_registry.ControlNetSlot(cn_img, cn_stop, cn_weight, cn_type))
 
         outpaint_selections = [o.lower() for o in outpaint_selections]
         base_model_additional_loras = []
@@ -260,9 +258,7 @@ def worker():
 
         use_synthetic_refiner = False
 
-        controlnet_canny_path = None
-        controlnet_cpds_path = None
-        clip_vision_path, ip_negative_path, ip_adapter_path, ip_adapter_face_path = None, None, None, None
+        cn_model_paths = {}
 
         seed = int(image_seed)
         print(f'[Parameters] Seed = {seed}')
@@ -399,27 +395,13 @@ def worker():
                     mixing_image_prompt_and_vary_upscale or \
                     mixing_image_prompt_and_inpaint:
                 goals.append('cn')
-                if len(cn_tasks[flags.cn_canny]) > 0:
-                    controlnet_canny_path = downloader.downloading_controlnet_canny()
-                    controlnet_canny_path = str(Path(controlnet_canny_path).resolve())
-                if len(cn_tasks[flags.cn_cpds]) > 0:
-                    controlnet_cpds_path = downloader.downloading_controlnet_cpds()
-                    controlnet_cpds_path = str(Path(controlnet_cpds_path).resolve())
-                if len(cn_tasks[flags.cn_ip]) > 0:
-                    clip_vision_path, ip_negative_path, ip_adapter_path = downloader.downloading_ip_adapters('ip')
-                    ip_adapter_path = str(Path(ip_adapter_path).resolve())
-                    ip_adapter.load_ip_adapter(clip_vision_path, ip_negative_path, ip_adapter_path)
-                if len(cn_tasks[flags.cn_ip_face]) > 0:
-                    clip_vision_path, ip_negative_path, ip_adapter_face_path = downloader.downloading_ip_adapters('face')
-                    ip_adapter_face_path = str(Path(ip_adapter_face_path).resolve())
-                    ip_adapter.load_ip_adapter(clip_vision_path, ip_negative_path, ip_adapter_face_path)
+                for cn_type in controlnet_registry.TYPES:
+                    if len(cn_tasks[cn_type.name]) > 0:
+                        cn_model_paths[cn_type.name] = cn_type.load_model()
                 progressbar(async_task, 1, 'Loading control models ...')
 
-            controlnet_paths = []
-            if controlnet_canny_path is not None:
-                controlnet_paths.append(controlnet_canny_path)
-            if controlnet_cpds_path is not None:
-                controlnet_paths.append(controlnet_cpds_path)
+            controlnet_paths = [cn_model_paths[t.name] for t in controlnet_registry.TYPES
+                                if t.feeds_controlnet_pipeline and t.name in cn_model_paths]
             if controlnet_paths:
                 pipeline.refresh_controlnets(controlnet_paths)
 
@@ -678,57 +660,28 @@ def worker():
             print(f'Final resolution is {str((final_height, final_width))}, latent is {str((height, width))}.')
 
         if 'cn' in goals:
-            for task in cn_tasks[flags.cn_canny]:
-                cn_img, cn_stop, cn_weight = task
-                cn_img = resize_image(HWC3(cn_img), width=width, height=height)
+            # 一次遍历覆盖所有类型：预处理本身由注册表里各类型的 preprocess 负责
+            for cn_type in controlnet_registry.TYPES:
+                if not cn_tasks[cn_type.name]:
+                    continue
 
-                if not skipping_cn_preprocessor:
-                    cn_img = preprocessors.canny_pyramid(cn_img, canny_low_threshold, canny_high_threshold)
+                ctx = controlnet_registry.PreprocessContext(
+                    width=width,
+                    height=height,
+                    skipping_preprocessor=skipping_cn_preprocessor,
+                    canny_low_threshold=canny_low_threshold,
+                    canny_high_threshold=canny_high_threshold,
+                    model_path=cn_model_paths.get(cn_type.name),
+                )
 
-                cn_img = HWC3(cn_img)
-                task[0] = core.numpy_to_pytorch(cn_img)
-                if debugging_cn_preprocessor:
-                    yield_result(async_task, cn_img, black_out_nsfw, do_not_show_finished_images=True)
-                    return
-            for task in cn_tasks[flags.cn_cpds]:
-                cn_img, cn_stop, cn_weight = task
-                cn_img = resize_image(HWC3(cn_img), width=width, height=height)
+                for slot in cn_tasks[cn_type.name]:
+                    slot.image, display_image = cn_type.preprocess(slot.image, ctx)
+                    if debugging_cn_preprocessor:
+                        yield_result(async_task, display_image, black_out_nsfw, do_not_show_finished_images=True)
+                        return
 
-                if not skipping_cn_preprocessor:
-                    cn_img = preprocessors.cpds(cn_img)
-
-                cn_img = HWC3(cn_img)
-                task[0] = core.numpy_to_pytorch(cn_img)
-                if debugging_cn_preprocessor:
-                    yield_result(async_task, cn_img, black_out_nsfw, do_not_show_finished_images=True)
-                    return
-            for task in cn_tasks[flags.cn_ip]:
-                cn_img, cn_stop, cn_weight = task
-                cn_img = HWC3(cn_img)
-
-                # https://github.com/tencent-ailab/IP-Adapter/blob/d580c50a291566bbf9fc7ac0f760506607297e6d/README.md?plain=1#L75
-                cn_img = resize_image(cn_img, width=224, height=224, resize_mode=0)
-
-                task[0] = ip_adapter.preprocess(cn_img, ip_adapter_path=ip_adapter_path)
-                if debugging_cn_preprocessor:
-                    yield_result(async_task, cn_img, black_out_nsfw, do_not_show_finished_images=True)
-                    return
-            for task in cn_tasks[flags.cn_ip_face]:
-                cn_img, cn_stop, cn_weight = task
-                cn_img = HWC3(cn_img)
-
-                if not skipping_cn_preprocessor:
-                    cn_img = extras.face_crop.crop_image(cn_img)
-
-                # https://github.com/tencent-ailab/IP-Adapter/blob/d580c50a291566bbf9fc7ac0f760506607297e6d/README.md?plain=1#L75
-                cn_img = resize_image(cn_img, width=224, height=224, resize_mode=0)
-
-                task[0] = ip_adapter.preprocess(cn_img, ip_adapter_path=ip_adapter_face_path)
-                if debugging_cn_preprocessor:
-                    yield_result(async_task, cn_img, black_out_nsfw, do_not_show_finished_images=True)
-                    return
-
-            all_ip_tasks = cn_tasks[flags.cn_ip] + cn_tasks[flags.cn_ip_face]
+            all_ip_tasks = [slot for cn_type in controlnet_registry.unet_patch_types()
+                            for slot in cn_tasks[cn_type.name]]
 
             if len(all_ip_tasks) > 0:
                 pipeline.final_unet = ip_adapter.patch_model(pipeline.final_unet, all_ip_tasks)
@@ -795,14 +748,12 @@ def worker():
                 positive_cond, negative_cond = task['c'], task['uc']
 
                 if 'cn' in goals:
-                    for cn_flag, cn_path in [
-                        (flags.cn_canny, controlnet_canny_path),
-                        (flags.cn_cpds, controlnet_cpds_path)
-                    ]:
-                        for cn_img, cn_stop, cn_weight in cn_tasks[cn_flag]:
+                    for cn_type in controlnet_registry.conditioning_types():
+                        cn_path = cn_model_paths.get(cn_type.name)
+                        for slot in cn_tasks[cn_type.name]:
                             positive_cond, negative_cond = core.apply_controlnet(
                                 positive_cond, negative_cond,
-                                pipeline.loaded_ControlNets[cn_path], cn_img, cn_weight, 0, cn_stop)
+                                pipeline.loaded_ControlNets[cn_path], slot.image, slot.weight, 0, slot.stop)
 
                 imgs = pipeline.process_diffusion(
                     positive_cond=positive_cond,

@@ -8,6 +8,7 @@ import ReFocus_version
 import modules.html
 import modules.async_worker as worker
 import modules.arg_schema as arg_schema
+import modules.controlnet_registry as controlnet_registry
 import modules.constants as constants
 import modules.flags as flags
 import modules.meta_parser
@@ -475,7 +476,7 @@ with gradio_root:
                                     ip_ctrls.append(ip_image)
                                     with gr.Column(visible=False) as ad_col:
                                         with gr.Row():
-                                            default_end, default_weight = flags.default_parameters[flags.default_ip]
+                                            default_end, default_weight = controlnet_registry.default_parameters(controlnet_registry.DEFAULT_TYPE)
 
                                             ip_stop = gr.Slider(label='Stop At', minimum=0.0, maximum=1.0, step=0.001, value=default_end, buttons=[])
                                             ip_stops.append(ip_stop)
@@ -485,11 +486,11 @@ with gradio_root:
                                             ip_weights.append(ip_weight)
                                             ip_ctrls.append(ip_weight)
 
-                                        ip_type = gr.Radio(label='Type', choices=flags.ip_list, value=flags.default_ip, container=False)
+                                        ip_type = gr.Radio(label='Type', choices=list(controlnet_registry.names()), value=controlnet_registry.DEFAULT_TYPE, container=False)
                                         ip_types.append(ip_type)
                                         ip_ctrls.append(ip_type)
 
-                                        ip_type.change(lambda x: flags.default_parameters[x], inputs=[ip_type], outputs=[ip_stop, ip_weight], queue=False, show_progress=False)
+                                        ip_type.change(lambda x: controlnet_registry.default_parameters(x), inputs=[ip_type], outputs=[ip_stop, ip_weight], queue=False, show_progress=False)
                                     ip_ad_cols.append(ad_col)
                         ip_advanced = gr.Checkbox(label='Advanced', value=False, container=False)
                         gr.HTML('* \"Image Prompt\" is powered by Fooocus Image Mixture Engine (v1.0.1). <a href="https://github.com/lllyasviel/Fooocus/discussions/557" target="_blank">\U0001F4D4 Document</a>')
