@@ -138,10 +138,13 @@ def diffusion_progress(model, sigma):
 
     旧实现由被替换掉的 UNet.forward 写入 global_diffusion_progress（1 - timestep/999）。
     现在没有那个钩子了，改用 model_sampling.timestep(sigma) 得到同一个离散 timestep。
-    注意：CFG 钩子拿到的 sigma 与旧代码同一步，所以语义一致。
+
+    注意这里拿到的是 BaseModel（不是 ModelPatcher，`get_model_object` 在后者身上），
+    所以读的是模型自带的 model_sampling，而不是被 add_object_patch 替换过的那个。
+    只有 LCM 模式会替换 model_sampling，而 LCM 下 sharpness 被强制为 0、cfg 为 1，
+    本函数的结果在那种配置下不会被 consume（alpha 恒为 0，且 compute_cfg 的 t 不参与）。
     """
-    model_sampling = model.get_model_object("model_sampling")
-    t = model_sampling.timestep(sigma)
+    t = model.model_sampling.timestep(sigma)
     return float(1.0 - (t.flatten()[0].item() / 999.0))
 
 
