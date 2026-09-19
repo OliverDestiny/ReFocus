@@ -55,6 +55,22 @@ def assert_model_integrity():
     if error_message is not None:
         raise NotImplementedError(error_message)
 
+    # base 与 refiner 必须使用同一套噪声调度：refiner 切换只是换模型、不换 sigma 序列，
+    # 两边调度不一致时会从「基座的 50%」跳到「另一条曲线的 50%」，结果是噪声图而不报错。
+    # 用 sigma_max 判断——同为 EPS 的 SDXL 都是 14.6146，而 v_prediction / 零终端 SNR
+    # 模型会差一个量级（实测 silvermoonmix_v40VPred 是 4518.76）。
+    base_sampling = model_base.unet_with_lora.model.model_sampling
+    if model_refiner.unet_with_lora is not None:
+        refiner_sampling = model_refiner.unet_with_lora.model.model_sampling
+        a = float(base_sampling.sigma_max)
+        b = float(refiner_sampling.sigma_max)
+        ratio = max(a, b) / max(min(a, b), 1e-8)
+        if ratio > 1.5:
+            print(f'[ReFocus] WARNING: base and refiner use different noise schedules '
+                  f'(sigma_max {a:.4f} vs {b:.4f}). The refiner switch keeps one sigma sequence, '
+                  f'so this combination produces a noise image. Use two models of the same '
+                  f'prediction type (both EPS, or both v_prediction).')
+
     return True
 
 
