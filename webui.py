@@ -463,31 +463,27 @@ with gradio_root:
                                 gr.HTML('<a href="https://github.com/lllyasviel/Fooocus/discussions/390" target="_blank">\U0001F4D4 Document</a>')
                     with gr.TabItem(label='Image Prompt') as ip_tab:
                         with gr.Row():
-                            ip_images = []
-                            ip_types = []
-                            ip_stops = []
-                            ip_weights = []
                             ip_ctrls = []
                             ip_ad_cols = []
                             for _ in range(flags.controlnet_image_count):
                                 with gr.Column():
                                     ip_image = gr.Image(label='Image', sources=['upload'], type='numpy', show_label=False, height=300)
-                                    ip_images.append(ip_image)
                                     ip_ctrls.append(ip_image)
                                     with gr.Column(visible=False) as ad_col:
                                         with gr.Row():
                                             default_end, default_weight = controlnet_registry.default_parameters(controlnet_registry.DEFAULT_TYPE)
 
+                                            # Start 默认 0：与之前写死的初始值一致，默认行为不变
+                                            ip_start = gr.Slider(label='Start At', minimum=0.0, maximum=1.0, step=0.001, value=0.0, buttons=[])
+                                            ip_ctrls.append(ip_start)
+
                                             ip_stop = gr.Slider(label='Stop At', minimum=0.0, maximum=1.0, step=0.001, value=default_end, buttons=[])
-                                            ip_stops.append(ip_stop)
                                             ip_ctrls.append(ip_stop)
 
                                             ip_weight = gr.Slider(label='Weight', minimum=0.0, maximum=2.0, step=0.001, value=default_weight, buttons=[])
-                                            ip_weights.append(ip_weight)
                                             ip_ctrls.append(ip_weight)
 
                                         ip_type = gr.Radio(label='Type', choices=list(controlnet_registry.names()), value=controlnet_registry.DEFAULT_TYPE, container=False)
-                                        ip_types.append(ip_type)
                                         ip_ctrls.append(ip_type)
 
                                         ip_type.change(lambda x: controlnet_registry.default_parameters(x), inputs=[ip_type], outputs=[ip_stop, ip_weight], queue=False, show_progress=False)

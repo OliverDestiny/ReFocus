@@ -169,11 +169,13 @@ def worker():
         cn_tasks = controlnet_registry.new_task_map()
         for i in range(flags.controlnet_image_count):
             cn_img = raw[f'cn_image_{i + 1}']
+            cn_start = raw[f'cn_start_{i + 1}']
             cn_stop = raw[f'cn_stop_{i + 1}']
             cn_weight = raw[f'cn_weight_{i + 1}']
             cn_type = raw[f'cn_type_{i + 1}']
             if cn_img is not None:
-                cn_tasks[cn_type].append(controlnet_registry.ControlNetSlot(cn_img, cn_stop, cn_weight, cn_type))
+                cn_tasks[cn_type].append(controlnet_registry.ControlNetSlot(
+                    image=cn_img, start=cn_start, stop=cn_stop, weight=cn_weight, type=cn_type))
 
         outpaint_selections = [o.lower() for o in outpaint_selections]
         base_model_additional_loras = []
@@ -753,7 +755,7 @@ def worker():
                         for slot in cn_tasks[cn_type.name]:
                             positive_cond, negative_cond = core.apply_controlnet(
                                 positive_cond, negative_cond,
-                                pipeline.loaded_ControlNets[cn_path], slot.image, slot.weight, 0, slot.stop)
+                                pipeline.loaded_ControlNets[cn_path], slot.image, slot.weight, slot.start, slot.stop)
 
                 imgs = pipeline.process_diffusion(
                     positive_cond=positive_cond,

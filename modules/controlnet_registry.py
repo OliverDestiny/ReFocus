@@ -51,11 +51,13 @@ class ControlNetSlot:
     """一个参考图槽位的运行时状态。
 
     原来这里是 3 元素列表 [image, stop, weight]，改成数据类是为了后续逐槽加
-    start / softness / mask 时不必再动解包处。
+    softness / mask 时不必再动解包处。
     image 在预处理前是 numpy 图，预处理后被替换成该类型的 slot_value。
+    start/stop 是采样进度区间（0~1），作用与 A1111 的 "Starting/Ending Step" 一致。
     """
 
     image: object
+    start: float
     stop: float
     weight: float
     type: str

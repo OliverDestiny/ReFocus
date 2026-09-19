@@ -32,10 +32,11 @@ def _lora_args() -> Tuple[str, ...]:
 
 
 def _image_prompt_args() -> Tuple[str, ...]:
-    # 每个槽 4 项，顺序与 UI 的 (Image, Stop At, Weight, Type) 一致
+    # 每个槽 5 项，顺序与 UI 的 (Image, Start At, Stop At, Weight, Type) 一致
     out = []
     for i in range(flags.controlnet_image_count):
         out.append(f'cn_image_{i + 1}')
+        out.append(f'cn_start_{i + 1}')
         out.append(f'cn_stop_{i + 1}')
         out.append(f'cn_weight_{i + 1}')
         out.append(f'cn_type_{i + 1}')
