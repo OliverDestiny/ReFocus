@@ -203,16 +203,21 @@ def attach_model_hooks(model):
     现在用核心冻结的 model_function_wrapper 挂在同一位置。
     """
     model.set_model_sampler_cfg_function(custom_sampler_cfg_function)
-    model.set_model_unet_function_wrapper(unet_function_wrapper)
+
+    def unet_wrapper(apply_model, args):
+        c = args["c"]
+        if c.get("y") is not None:
+            # args["timestep"] 是 sigma（k-diffusion 把 sigma 一路传到 predict_noise，
+            # 见 comfy/samplers.py 里 transformer_options["sigmas"] = timestep），
+            # 而 timed_adm 的阈值是 0~999 的离散 timestep，必须先换算，
+            # 否则比较恒为假、遮罩恒为 0，ADM 缩放就永远不生效。
+            # 用 model_sampling 走 get_model_object，以便取到 LCM 替换过的那份。
+            t = model.get_model_object("model_sampling").timestep(args["timestep"])
+            c["y"] = timed_adm(c["y"], t)
+        return apply_model(args["input"], args["timestep"], **c)
+
+    model.set_model_unet_function_wrapper(unet_wrapper)
     return model
-
-
-def unet_function_wrapper(apply_model, args):
-    """上游在 calc_cond_batch 里以 (model.apply_model, {...}) 调用本包装器。"""
-    c = args["c"]
-    if c.get("y") is not None:
-        c["y"] = timed_adm(c["y"], args["timestep"])
-    return apply_model(args["input"], args["timestep"], **c)
 
 
 # ---------------------------------------------------------------------------
