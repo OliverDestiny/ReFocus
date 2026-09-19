@@ -1,11 +1,11 @@
 import os
 import torch
-import ldm_patched.modules.model_management as model_management
+import comfy.model_management as model_management
 
 from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
 from modules.config import path_clip_vision
-from ldm_patched.modules.model_patcher import ModelPatcher
+from comfy.model_patcher import ModelPatcher
 from extras.BLIP.models.blip import blip_decoder
 from modules.deps_models_download import ensure_blip_caption_model
 

@@ -3,34 +3,21 @@ import einops
 import torch
 import numpy as np
 
-import ldm_patched.modules.model_management
-import ldm_patched.modules.model_detection
-import ldm_patched.modules.model_patcher
-import ldm_patched.modules.utils
-import ldm_patched.modules.controlnet
+import comfy.model_management
+import comfy.model_detection
+import comfy.model_patcher
+import comfy.utils
+import comfy.controlnet
+import comfy.latent_formats
+import comfy.sample
+
 import modules.sample_hijack
-import ldm_patched.modules.samplers
-import ldm_patched.modules.latent_formats
+import modules.comfy_ops as comfy_ops
 
-from ldm_patched.modules.sd import load_checkpoint_guess_config
-from ldm_patched.contrib.external import VAEDecode, EmptyLatentImage, VAEEncode, VAEEncodeTiled, VAEDecodeTiled, \
-    ControlNetApplyAdvanced
-from ldm_patched.contrib.external_freelunch import FreeU_V2
-from ldm_patched.modules.sample import prepare_mask
-from modules.lora import match_lora
-from ldm_patched.modules.lora import model_lora_keys_unet, model_lora_keys_clip
+from comfy.sd import load_checkpoint_guess_config
+from modules.lora import load_lora_patches
+from comfy.lora import model_lora_keys_unet, model_lora_keys_clip
 from modules.config import path_embeddings
-from ldm_patched.contrib.external_model_advanced import ModelSamplingDiscrete
-
-
-opEmptyLatentImage = EmptyLatentImage()
-opVAEDecode = VAEDecode()
-opVAEEncode = VAEEncode()
-opVAEDecodeTiled = VAEDecodeTiled()
-opVAEEncodeTiled = VAEEncodeTiled()
-opControlNetApplyAdvanced = ControlNetApplyAdvanced()
-opFreeU = FreeU_V2()
-opModelSamplingDiscrete = ModelSamplingDiscrete()
 
 
 class StableDiffusionModel:
@@ -91,17 +78,14 @@ class StableDiffusionModel:
         self.clip_with_lora = self.clip.clone() if self.clip is not None else None
 
         for lora_filename, weight in loras_to_load:
-            lora_unmatch = ldm_patched.modules.utils.load_torch_file(lora_filename, safe_load=False)
-            lora_unet, lora_unmatch = match_lora(lora_unmatch, self.lora_key_map_unet)
-            lora_clip, lora_unmatch = match_lora(lora_unmatch, self.lora_key_map_clip)
+            lora_sd = comfy.utils.load_torch_file(lora_filename, safe_load=False)
+            lora_unet = load_lora_patches(lora_sd, self.lora_key_map_unet)
+            lora_clip = load_lora_patches(lora_sd, self.lora_key_map_clip)
 
-            if len(lora_unmatch) > 12:
-                # model mismatch
+            if len(lora_unet) == 0 and len(lora_clip) == 0:
+                # 与当前模型完全不匹配（原实现用「未匹配 key 超过 12 个」判断，是启发式）
+                print(f'LoRA [{lora_filename}] does not match model [{self.filename}], skipped.')
                 continue
-
-            if len(lora_unmatch) > 0:
-                print(f'Loaded LoRA [{lora_filename}] for model [{self.filename}] '
-                      f'with unmatched keys {list(lora_unmatch.keys())}')
 
             if self.unet_with_lora is not None and len(lora_unet) > 0:
                 loaded_keys = self.unet_with_lora.add_patches(lora_unet, weight)
@@ -123,20 +107,26 @@ class StableDiffusionModel:
 @torch.no_grad()
 @torch.inference_mode()
 def apply_freeu(model, b1, b2, s1, s2):
-    return opFreeU.patch(model=model, b1=b1, b2=b2, s1=s1, s2=s2)[0]
+    return comfy_ops.freeu_patch(model, b1, b2, s1, s2)
+
+
+@torch.no_grad()
+@torch.inference_mode()
+def apply_model_sampling_discrete(model, sampling='lcm', zsnr=False):
+    return comfy_ops.model_sampling_discrete_patch(model, sampling, zsnr)
 
 
 @torch.no_grad()
 @torch.inference_mode()
 def load_controlnet(ckpt_filename):
-    return ldm_patched.modules.controlnet.load_controlnet(ckpt_filename)
+    return comfy.controlnet.load_controlnet(ckpt_filename)
 
 
 @torch.no_grad()
 @torch.inference_mode()
 def apply_controlnet(positive, negative, control_net, image, strength, start_percent, end_percent):
-    return opControlNetApplyAdvanced.apply_controlnet(positive=positive, negative=negative, control_net=control_net,
-        image=image, strength=strength, start_percent=start_percent, end_percent=end_percent)
+    return comfy_ops.controlnet_apply_advanced(positive, negative, control_net,
+                                               image, strength, start_percent, end_percent)
 
 
 @torch.no_grad()
@@ -149,25 +139,25 @@ def load_model(ckpt_filename):
 @torch.no_grad()
 @torch.inference_mode()
 def generate_empty_latent(width=1024, height=1024, batch_size=1):
-    return opEmptyLatentImage.generate(width=width, height=height, batch_size=batch_size)[0]
+    return comfy_ops.empty_latent(width, height, batch_size)
 
 
 @torch.no_grad()
 @torch.inference_mode()
 def decode_vae(vae, latent_image, tiled=False):
     if tiled:
-        return opVAEDecodeTiled.decode(samples=latent_image, vae=vae, tile_size=512)[0]
+        return comfy_ops.vae_decode_tiled(vae, latent_image, tile_size=512)
     else:
-        return opVAEDecode.decode(samples=latent_image, vae=vae)[0]
+        return comfy_ops.vae_decode(vae, latent_image)
 
 
 @torch.no_grad()
 @torch.inference_mode()
 def encode_vae(vae, pixels, tiled=False):
     if tiled:
-        return opVAEEncodeTiled.encode(pixels=pixels, vae=vae, tile_size=512)[0]
+        return comfy_ops.vae_encode_tiled(vae, pixels, tile_size=512)
     else:
-        return opVAEEncode.encode(pixels=pixels, vae=vae)[0]
+        return comfy_ops.vae_encode(vae, pixels)
 
 
 @torch.no_grad()
@@ -222,7 +212,7 @@ def get_previewer(model):
     global VAE_approx_models
 
     from modules.config import path_vae_approx
-    is_sdxl = isinstance(model.model.latent_format, ldm_patched.modules.latent_formats.SDXL)
+    is_sdxl = isinstance(model.model.latent_format, comfy.latent_formats.SDXL)
     vae_approx_filename = os.path.join(path_vae_approx, 'xlvaeapp.pth' if is_sdxl else 'vaeapp_sd15.pth')
 
     if vae_approx_filename in VAE_approx_models:
@@ -234,14 +224,14 @@ def get_previewer(model):
         del sd
         VAE_approx_model.eval()
 
-        if ldm_patched.modules.model_management.should_use_fp16():
+        if comfy.model_management.should_use_fp16():
             VAE_approx_model.half()
             VAE_approx_model.current_type = torch.float16
         else:
             VAE_approx_model.float()
             VAE_approx_model.current_type = torch.float32
 
-        VAE_approx_model.to(ldm_patched.modules.model_management.get_torch_device())
+        VAE_approx_model.to(comfy.model_management.get_torch_device())
         VAE_approx_models[vae_approx_filename] = VAE_approx_model
 
     @torch.no_grad()
@@ -261,11 +251,13 @@ def get_previewer(model):
 @torch.inference_mode()
 def ksampler(model, positive, negative, latent, seed=None, steps=30, cfg=7.0, sampler_name='dpmpp_2m_sde_gpu',
              scheduler='karras', denoise=1.0, disable_noise=False, start_step=None, last_step=None,
-             force_full_denoise=False, callback_function=None, refiner=None, refiner_switch=-1,
+             force_full_denoise=False, callback_function=None,
              previewer_start=None, previewer_end=None, sigmas=None, noise_mean=None, disable_preview=False):
+    # 注意：这里不再有 refiner / refiner_switch 参数。原来它们驱动 sample_hijack 的
+    # 「采样中途换模型」，现代核心没有对应挂载点，已改为 process_diffusion 的原生两遍采样。
 
     if sigmas is not None:
-        sigmas = sigmas.clone().to(ldm_patched.modules.model_management.get_torch_device())
+        sigmas = sigmas.clone().to(comfy.model_management.get_torch_device())
 
     latent_image = latent["samples"]
 
@@ -273,7 +265,7 @@ def ksampler(model, positive, negative, latent, seed=None, steps=30, cfg=7.0, sa
         noise = torch.zeros(latent_image.size(), dtype=latent_image.dtype, layout=latent_image.layout, device="cpu")
     else:
         batch_inds = latent["batch_index"] if "batch_index" in latent else None
-        noise = ldm_patched.modules.sample.prepare_noise(latent_image, seed, batch_inds)
+        noise = comfy.sample.prepare_noise(latent_image, seed, batch_inds)
 
     if isinstance(noise_mean, torch.Tensor):
         noise = noise + noise_mean - torch.mean(noise, dim=1, keepdim=True)
@@ -291,33 +283,25 @@ def ksampler(model, positive, negative, latent, seed=None, steps=30, cfg=7.0, sa
         previewer_end = steps
 
     def callback(step, x0, x, total_steps):
-        ldm_patched.modules.model_management.throw_exception_if_processing_interrupted()
+        comfy.model_management.throw_exception_if_processing_interrupted()
         y = None
         if previewer is not None and not disable_preview:
             y = previewer(x0, previewer_start + step, previewer_end)
         if callback_function is not None:
             callback_function(previewer_start + step, x0, x, previewer_end, y)
 
-    disable_pbar = False
-    modules.sample_hijack.current_refiner = refiner
-    modules.sample_hijack.refiner_switch_step = refiner_switch
-    ldm_patched.modules.samplers.sample = modules.sample_hijack.sample_hacked
+    samples = comfy.sample.sample(model,
+                                  noise, steps, cfg, sampler_name, scheduler,
+                                  positive, negative, latent_image,
+                                  denoise=denoise, disable_noise=disable_noise,
+                                  start_step=start_step,
+                                  last_step=last_step,
+                                  force_full_denoise=force_full_denoise, noise_mask=noise_mask,
+                                  callback=callback,
+                                  disable_pbar=False, seed=seed, sigmas=sigmas)
 
-    try:
-        samples = ldm_patched.modules.sample.sample(model,
-                                                    noise, steps, cfg, sampler_name, scheduler,
-                                                    positive, negative, latent_image,
-                                                    denoise=denoise, disable_noise=disable_noise,
-                                                    start_step=start_step,
-                                                    last_step=last_step,
-                                                    force_full_denoise=force_full_denoise, noise_mask=noise_mask,
-                                                    callback=callback,
-                                                    disable_pbar=disable_pbar, seed=seed, sigmas=sigmas)
-
-        out = latent.copy()
-        out["samples"] = samples
-    finally:
-        modules.sample_hijack.current_refiner = None
+    out = latent.copy()
+    out["samples"] = samples
 
     return out
 

@@ -1,30 +1,46 @@
+# This file is part of ReFocus.
+# Original work Copyright (c) 2023 lllyasviel (Fooocus) & 2024 ehristoforu (DeFooocus).
+# Modified and distributed under the terms of the GNU General Public License v3.0.
+
+"""ReFocus 对推理核心的注入层。
+
+**这个文件是 ReFocus 与上游 ComfyUI 的全部耦合面，越小越好。**
+
+原则（见 .zcode/phase-d-migration-plan.md）：
+- 能用核心的扩展接口就不要替换核心内部。`patcher_extension` 的 `WrapperExecutor`
+  与 `model_options` 系列钩子是上游冻结的接口（`patcher_extension.py` 12 个月只改了 5 行），
+  改走这些接口的补丁不会随上游 churn 而失效。
+- 只保留上游确实没有的能力。迁移到现代核心后，原来 9 个补丁里 6 个已被上游原生实现，
+  直接删除而不是移植：
+
+  | 原补丁 | 处置 |
+  |---|---|
+  | ModelPatcher.calculate_weight | 删：现代走 comfy.lora + weight_adapter |
+  | UNetModel.forward | 删：现代原生支持 input/output_block_patch |
+  | KSamplerX0Inpaint.forward | 删：现代 __call__ 就是同一套混合，且支持 denoise_mask_function |
+  | BrownianTreeNoiseSampler | 删：现代 sampler 自己构建同样的噪声场 |
+  | samplers.sampling_function | 删：改挂 model_options["sampler_cfg_function"] |
+  | SDXL.encode_adm | **保留**：现代无对应，是 Fooocus ADM 引导的核心 |
+  | ControlNet.forward | 收敛为薄包装：只做 timed_adm 与 softness，其余交给上游（含 union） |
+  | load_models_gpu 计时 | 保留（仅计时） |
+  | build_loaded 权重纠错 | 保留（与核心无关） |
+
+  `modules/patch_precision.py` 整文件删除：上游已收敛到同样数值，它早已是空操作。
+"""
+
 import os
 import torch
 import time
 import math
-import ldm_patched.modules.model_base
-import ldm_patched.ldm.modules.diffusionmodules.openaimodel
-import ldm_patched.modules.model_management
-import modules.anisotropic as anisotropic
-import ldm_patched.ldm.modules.attention
-import ldm_patched.k_diffusion.sampling
-import ldm_patched.modules.sd1_clip
-import modules.inpaint_worker as inpaint_worker
-import ldm_patched.ldm.modules.diffusionmodules.openaimodel
-import ldm_patched.ldm.modules.diffusionmodules.model
-import ldm_patched.modules.sd
-import ldm_patched.controlnet.cldm
-import ldm_patched.modules.model_patcher
-import ldm_patched.modules.samplers
-import ldm_patched.modules.args_parser
 import warnings
 import safetensors.torch
-import modules.constants as constants
 
-from ldm_patched.modules.samplers import calc_cond_uncond_batch
-from ldm_patched.k_diffusion.sampling import BatchedBrownianTree
-from ldm_patched.ldm.modules.diffusionmodules.openaimodel import forward_timestep_embed, apply_control
-from modules.patch_precision import patch_all_precision
+import comfy.model_base
+import comfy.cldm.cldm
+import comfy.model_management
+import comfy.model_patcher
+
+import modules.anisotropic as anisotropic
 
 
 class PatchSettings:
@@ -41,216 +57,21 @@ class PatchSettings:
         self.negative_adm_scale = negative_adm_scale
         self.controlnet_softness = controlnet_softness
         self.adaptive_cfg = adaptive_cfg
-        self.global_diffusion_progress = 0
+        # VAE refiner swap 需要把采样过程中的 eps 记下来；None 表示不记录。
         self.eps_record = None
 
 
 patch_settings = {}
 
 
-def calculate_weight_patched(self, patches, weight, key):
-    for p in patches:
-        alpha = p[0]
-        v = p[1]
-        strength_model = p[2]
-
-        if strength_model != 1.0:
-            weight *= strength_model
-
-        if isinstance(v, list):
-            v = (self.calculate_weight(v[1:], v[0].clone(), key),)
-
-        if len(v) == 1:
-            patch_type = "diff"
-        elif len(v) == 2:
-            patch_type = v[0]
-            v = v[1]
-
-        if patch_type == "diff":
-            w1 = v[0]
-            if alpha != 0.0:
-                if w1.shape != weight.shape:
-                    print("WARNING SHAPE MISMATCH {} WEIGHT NOT MERGED {} != {}".format(key, w1.shape, weight.shape))
-                else:
-                    weight += alpha * ldm_patched.modules.model_management.cast_to_device(w1, weight.device, weight.dtype)
-        elif patch_type == "lora":
-            mat1 = ldm_patched.modules.model_management.cast_to_device(v[0], weight.device, torch.float32)
-            mat2 = ldm_patched.modules.model_management.cast_to_device(v[1], weight.device, torch.float32)
-            if v[2] is not None:
-                alpha *= v[2] / mat2.shape[0]
-            if v[3] is not None:
-                mat3 = ldm_patched.modules.model_management.cast_to_device(v[3], weight.device, torch.float32)
-                final_shape = [mat2.shape[1], mat2.shape[0], mat3.shape[2], mat3.shape[3]]
-                mat2 = torch.mm(mat2.transpose(0, 1).flatten(start_dim=1),
-                                mat3.transpose(0, 1).flatten(start_dim=1)).reshape(final_shape).transpose(0, 1)
-            try:
-                weight += (alpha * torch.mm(mat1.flatten(start_dim=1), mat2.flatten(start_dim=1))).reshape(
-                    weight.shape).type(weight.dtype)
-            except Exception as e:
-                print("ERROR", key, e)
-        elif patch_type == "fooocus":
-            w1 = ldm_patched.modules.model_management.cast_to_device(v[0], weight.device, torch.float32)
-            w_min = ldm_patched.modules.model_management.cast_to_device(v[1], weight.device, torch.float32)
-            w_max = ldm_patched.modules.model_management.cast_to_device(v[2], weight.device, torch.float32)
-            w1 = (w1 / 255.0) * (w_max - w_min) + w_min
-            if alpha != 0.0:
-                if w1.shape != weight.shape:
-                    print("WARNING SHAPE MISMATCH {} FOOOCUS WEIGHT NOT MERGED {} != {}".format(key, w1.shape, weight.shape))
-                else:
-                    weight += alpha * ldm_patched.modules.model_management.cast_to_device(w1, weight.device, weight.dtype)
-        elif patch_type == "lokr":
-            w1 = v[0]
-            w2 = v[1]
-            w1_a = v[3]
-            w1_b = v[4]
-            w2_a = v[5]
-            w2_b = v[6]
-            t2 = v[7]
-            dim = None
-
-            if w1 is None:
-                dim = w1_b.shape[0]
-                w1 = torch.mm(ldm_patched.modules.model_management.cast_to_device(w1_a, weight.device, torch.float32),
-                              ldm_patched.modules.model_management.cast_to_device(w1_b, weight.device, torch.float32))
-            else:
-                w1 = ldm_patched.modules.model_management.cast_to_device(w1, weight.device, torch.float32)
-
-            if w2 is None:
-                dim = w2_b.shape[0]
-                if t2 is None:
-                    w2 = torch.mm(ldm_patched.modules.model_management.cast_to_device(w2_a, weight.device, torch.float32),
-                                  ldm_patched.modules.model_management.cast_to_device(w2_b, weight.device, torch.float32))
-                else:
-                    w2 = torch.einsum('i j k l, j r, i p -> p r k l',
-                                      ldm_patched.modules.model_management.cast_to_device(t2, weight.device, torch.float32),
-                                      ldm_patched.modules.model_management.cast_to_device(w2_b, weight.device, torch.float32),
-                                      ldm_patched.modules.model_management.cast_to_device(w2_a, weight.device, torch.float32))
-            else:
-                w2 = ldm_patched.modules.model_management.cast_to_device(w2, weight.device, torch.float32)
-
-            if len(w2.shape) == 4:
-                w1 = w1.unsqueeze(2).unsqueeze(2)
-            if v[2] is not None and dim is not None:
-                alpha *= v[2] / dim
-
-            try:
-                weight += alpha * torch.kron(w1, w2).reshape(weight.shape).type(weight.dtype)
-            except Exception as e:
-                print("ERROR", key, e)
-        elif patch_type == "loha":
-            w1a = v[0]
-            w1b = v[1]
-            if v[2] is not None:
-                alpha *= v[2] / w1b.shape[0]
-            w2a = v[3]
-            w2b = v[4]
-            if v[5] is not None:  # cp decomposition
-                t1 = v[5]
-                t2 = v[6]
-                m1 = torch.einsum('i j k l, j r, i p -> p r k l',
-                                  ldm_patched.modules.model_management.cast_to_device(t1, weight.device, torch.float32),
-                                  ldm_patched.modules.model_management.cast_to_device(w1b, weight.device, torch.float32),
-                                  ldm_patched.modules.model_management.cast_to_device(w1a, weight.device, torch.float32))
-
-                m2 = torch.einsum('i j k l, j r, i p -> p r k l',
-                                  ldm_patched.modules.model_management.cast_to_device(t2, weight.device, torch.float32),
-                                  ldm_patched.modules.model_management.cast_to_device(w2b, weight.device, torch.float32),
-                                  ldm_patched.modules.model_management.cast_to_device(w2a, weight.device, torch.float32))
-            else:
-                m1 = torch.mm(ldm_patched.modules.model_management.cast_to_device(w1a, weight.device, torch.float32),
-                              ldm_patched.modules.model_management.cast_to_device(w1b, weight.device, torch.float32))
-                m2 = torch.mm(ldm_patched.modules.model_management.cast_to_device(w2a, weight.device, torch.float32),
-                              ldm_patched.modules.model_management.cast_to_device(w2b, weight.device, torch.float32))
-
-            try:
-                weight += (alpha * m1 * m2).reshape(weight.shape).type(weight.dtype)
-            except Exception as e:
-                print("ERROR", key, e)
-        elif patch_type == "glora":
-            if v[4] is not None:
-                alpha *= v[4] / v[0].shape[0]
-
-            a1 = ldm_patched.modules.model_management.cast_to_device(v[0].flatten(start_dim=1), weight.device, torch.float32)
-            a2 = ldm_patched.modules.model_management.cast_to_device(v[1].flatten(start_dim=1), weight.device, torch.float32)
-            b1 = ldm_patched.modules.model_management.cast_to_device(v[2].flatten(start_dim=1), weight.device, torch.float32)
-            b2 = ldm_patched.modules.model_management.cast_to_device(v[3].flatten(start_dim=1), weight.device, torch.float32)
-
-            weight += ((torch.mm(b2, b1) + torch.mm(torch.mm(weight.flatten(start_dim=1), a2), a1)) * alpha).reshape(weight.shape).type(weight.dtype)
-        else:
-            print("patch type not recognized", patch_type, key)
-
-    return weight
+def settings():
+    """取当前进程的 PatchSettings。由 async_worker 在每个任务开始时写入。"""
+    return patch_settings[os.getpid()]
 
 
-class BrownianTreeNoiseSamplerPatched:
-    transform = None
-    tree = None
-
-    @staticmethod
-    def global_init(x, sigma_min, sigma_max, seed=None, transform=lambda x: x, cpu=False):
-        if ldm_patched.modules.model_management.directml_enabled:
-            cpu = True
-
-        t0, t1 = transform(torch.as_tensor(sigma_min)), transform(torch.as_tensor(sigma_max))
-
-        BrownianTreeNoiseSamplerPatched.transform = transform
-        BrownianTreeNoiseSamplerPatched.tree = BatchedBrownianTree(x, t0, t1, seed, cpu=cpu)
-
-    def __init__(self, *args, **kwargs):
-        pass
-
-    @staticmethod
-    def __call__(sigma, sigma_next):
-        transform = BrownianTreeNoiseSamplerPatched.transform
-        tree = BrownianTreeNoiseSamplerPatched.tree
-
-        t0, t1 = transform(torch.as_tensor(sigma)), transform(torch.as_tensor(sigma_next))
-        return tree(t0, t1) / (t1 - t0).abs().sqrt()
-
-
-def compute_cfg(uncond, cond, cfg_scale, t):
-    pid = os.getpid()
-    mimic_cfg = float(patch_settings[pid].adaptive_cfg)
-    real_cfg = float(cfg_scale)
-
-    real_eps = uncond + real_cfg * (cond - uncond)
-
-    if cfg_scale > patch_settings[pid].adaptive_cfg:
-        mimicked_eps = uncond + mimic_cfg * (cond - uncond)
-        return real_eps * t + mimicked_eps * (1 - t)
-    else:
-        return real_eps
-
-
-def patched_sampling_function(model, x, timestep, uncond, cond, cond_scale, model_options=None, seed=None):
-    pid = os.getpid()
-
-    if math.isclose(cond_scale, 1.0) and not model_options.get("disable_cfg1_optimization", False):
-        final_x0 = calc_cond_uncond_batch(model, cond, None, x, timestep, model_options)[0]
-
-        if patch_settings[pid].eps_record is not None:
-            patch_settings[pid].eps_record = ((x - final_x0) / timestep).cpu()
-
-        return final_x0
-
-    positive_x0, negative_x0 = calc_cond_uncond_batch(model, cond, uncond, x, timestep, model_options)
-
-    positive_eps = x - positive_x0
-    negative_eps = x - negative_x0
-
-    alpha = 0.001 * patch_settings[pid].sharpness * patch_settings[pid].global_diffusion_progress
-
-    positive_eps_degraded = anisotropic.adaptive_anisotropic_filter(x=positive_eps, g=positive_x0)
-    positive_eps_degraded_weighted = positive_eps_degraded * alpha + positive_eps * (1.0 - alpha)
-
-    final_eps = compute_cfg(uncond=negative_eps, cond=positive_eps_degraded_weighted,
-                            cfg_scale=cond_scale, t=patch_settings[pid].global_diffusion_progress)
-
-    if patch_settings[pid].eps_record is not None:
-        patch_settings[pid].eps_record = (final_eps / timestep).cpu()
-
-    return x - final_eps
-
+# ---------------------------------------------------------------------------
+# ADM 引导（上游无对应，必须保留）
+# ---------------------------------------------------------------------------
 
 def round_to_64(x):
     h = float(x)
@@ -261,20 +82,32 @@ def round_to_64(x):
     return h
 
 
+def timed_adm(y, timesteps):
+    """按 adm_scaler_end 让 ADM 在采样后段淡出。
+
+    现代 UNet 不做这件事，所以它同时用在 UNet 与 ControlNet 两条 y 上。
+    """
+    if isinstance(y, torch.Tensor) and int(y.dim()) == 2 and int(y.shape[1]) == 5632:
+        y_mask = (timesteps > 999.0 * (1.0 - float(settings().adm_scaler_end))).to(y)[..., None]
+        y_with_adm = y[..., :2816].clone()
+        y_without_adm = y[..., 2816:].clone()
+        return y_with_adm * y_mask + y_without_adm * (1.0 - y_mask)
+    return y
+
+
 def sdxl_encode_adm_patched(self, **kwargs):
-    clip_pooled = ldm_patched.modules.model_base.sdxl_pooled(kwargs, self.noise_augmentor)
+    clip_pooled = comfy.model_base.sdxl_pooled(kwargs, self.noise_augmentor)
     width = kwargs.get("width", 1024)
     height = kwargs.get("height", 1024)
     target_width = width
     target_height = height
-    pid = os.getpid()
 
     if kwargs.get("prompt_type", "") == "negative":
-        width = float(width) * patch_settings[pid].negative_adm_scale
-        height = float(height) * patch_settings[pid].negative_adm_scale
+        width = float(width) * settings().negative_adm_scale
+        height = float(height) * settings().negative_adm_scale
     elif kwargs.get("prompt_type", "") == "positive":
-        width = float(width) * patch_settings[pid].positive_adm_scale
-        height = float(height) * patch_settings[pid].positive_adm_scale
+        width = float(width) * settings().positive_adm_scale
+        height = float(height) * settings().positive_adm_scale
 
     def embedder(number_list):
         h = self.embedder(torch.tensor(number_list, dtype=torch.float32))
@@ -293,160 +126,113 @@ def sdxl_encode_adm_patched(self, **kwargs):
     return final_adm
 
 
-def patched_KSamplerX0Inpaint_forward(self, x, sigma, uncond, cond, cond_scale, denoise_mask, model_options={}, seed=None):
-    if inpaint_worker.current_task is not None:
-        latent_processor = self.inner_model.inner_model.process_latent_in
-        inpaint_latent = latent_processor(inpaint_worker.current_task.latent).to(x)
-        inpaint_mask = inpaint_worker.current_task.latent_mask.to(x)
+# ---------------------------------------------------------------------------
+# CFG 钩子：锐度 + adaptive CFG（TSNR 仿制）+ eps_record
+#
+# 原来这是对 comfy.samplers.sampling_function 的整函数替换。现在改挂
+# model_options["sampler_cfg_function"]——上游自己的节点也这么做，属于官方扩展点。
+# ---------------------------------------------------------------------------
 
-        if getattr(self, 'energy_generator', None) is None:
-            # avoid bad results by using different seeds.
-            self.energy_generator = torch.Generator(device='cpu').manual_seed((seed + 1) % constants.MAX_SEED)
+def diffusion_progress(model, sigma):
+    """把当前 sigma 换算成 0~1 的扩散进度。
 
-        energy_sigma = sigma.reshape([sigma.shape[0]] + [1] * (len(x.shape) - 1))
-        current_energy = torch.randn(
-            x.size(), dtype=x.dtype, generator=self.energy_generator, device="cpu").to(x) * energy_sigma
-        x = x * inpaint_mask + (inpaint_latent + current_energy) * (1.0 - inpaint_mask)
+    旧实现由被替换掉的 UNet.forward 写入 global_diffusion_progress（1 - timestep/999）。
+    现在没有那个钩子了，改用 model_sampling.timestep(sigma) 得到同一个离散 timestep。
+    注意：CFG 钩子拿到的 sigma 与旧代码同一步，所以语义一致。
+    """
+    model_sampling = model.get_model_object("model_sampling")
+    t = model_sampling.timestep(sigma)
+    return float(1.0 - (t.flatten()[0].item() / 999.0))
 
-        out = self.inner_model(x, sigma,
-                               cond=cond,
-                               uncond=uncond,
-                               cond_scale=cond_scale,
-                               model_options=model_options,
-                               seed=seed)
 
-        out = out * inpaint_mask + inpaint_latent * (1.0 - inpaint_mask)
+def compute_cfg(uncond, cond, cfg_scale, t):
+    mimic_cfg = float(settings().adaptive_cfg)
+    real_cfg = float(cfg_scale)
+
+    real_eps = uncond + real_cfg * (cond - uncond)
+
+    if cfg_scale > settings().adaptive_cfg:
+        mimicked_eps = uncond + mimic_cfg * (cond - uncond)
+        return real_eps * t + mimicked_eps * (1 - t)
     else:
-        out = self.inner_model(x, sigma,
-                               cond=cond,
-                               uncond=uncond,
-                               cond_scale=cond_scale,
-                               model_options=model_options,
-                               seed=seed)
-    return out
+        return real_eps
 
 
-def timed_adm(y, timesteps):
-    if isinstance(y, torch.Tensor) and int(y.dim()) == 2 and int(y.shape[1]) == 5632:
-        y_mask = (timesteps > 999.0 * (1.0 - float(patch_settings[os.getpid()].adm_scaler_end))).to(y)[..., None]
-        y_with_adm = y[..., :2816].clone()
-        y_without_adm = y[..., 2816:].clone()
-        return y_with_adm * y_mask + y_without_adm * (1.0 - y_mask)
-    return y
+def custom_sampler_cfg_function(args):
+    """comfy 的 sampler_cfg_function 接口。
+
+    上游 comfy/samplers.py 的 cfg_function 传入的 cond/uncond 已经是 eps（x - denoised），
+    并要求返回最终 eps，因为 cfg_result = x - 返回值。
+
+    CFG≈1 时上游会跳过 uncond 分支（除非 model_options 里 disable_cfg1_optimization），
+    此时 args["uncond"] 来自零张量分支、等于 x，不可使用，所以此处单独处理。
+    """
+    x = args["input"]
+    sigma = args["sigma"]
+    cond_scale = args["cond_scale"]
+    cond_eps = args["cond"]
+    uncond_eps = args["uncond"]
+    cond_denoised = args["cond_denoised"]
+
+    progress = diffusion_progress(args["model"], sigma)
+
+    if math.isclose(cond_scale, 1.0) and not args["model_options"].get("disable_cfg1_optimization", False):
+        final_eps = cond_eps
+    else:
+        alpha = 0.001 * settings().sharpness * progress
+        cond_eps_degraded = anisotropic.adaptive_anisotropic_filter(x=cond_eps, g=cond_denoised)
+        cond_eps_weighted = cond_eps_degraded * alpha + cond_eps * (1.0 - alpha)
+        final_eps = compute_cfg(uncond=uncond_eps, cond=cond_eps_weighted, cfg_scale=cond_scale, t=progress)
+
+    if settings().eps_record is not None:
+        settings().eps_record = (final_eps / sigma).cpu()
+
+    return final_eps
+
+
+def attach_cfg_function(model):
+    """把 CFG 钩子挂到模型上。base 与 refiner 两个 unet 都要挂。"""
+    model.set_model_sampler_cfg_function(custom_sampler_cfg_function)
+    return model
+
+
+# ---------------------------------------------------------------------------
+# ControlNet：薄包装，而不是重写整个 forward
+#
+# 现代 cldm.ControlNet.forward 自己处理 union controlnet，返回
+# {"middle": [...], "output": [...]}（controlnet.py 的 control_merge 按 dict 迭代）。
+# 我们只做两件上游没有的事：入口的 timed_adm、出口的 softness 缩放。
+# 这样上游对 forward 的改动都能直接继承。
+# ---------------------------------------------------------------------------
+
+_cldm_forward_origin = None
 
 
 def patched_cldm_forward(self, x, hint, timesteps, context, y=None, **kwargs):
-    t_emb = ldm_patched.ldm.modules.diffusionmodules.openaimodel.timestep_embedding(timesteps, self.model_channels, repeat_only=False).to(x.dtype)
-    emb = self.time_embed(t_emb)
-    pid = os.getpid()
-
-    guided_hint = self.input_hint_block(hint, emb, context)
-
     y = timed_adm(y, timesteps)
 
-    outs = []
+    out = _cldm_forward_origin(self, x, hint, timesteps, context, y=y, **kwargs)
 
-    hs = []
-    if self.num_classes is not None:
-        assert y.shape[0] == x.shape[0]
-        emb = emb + self.label_emb(y)
-
-    h = x
-    for module, zero_conv in zip(self.input_blocks, self.zero_convs):
-        if guided_hint is not None:
-            h = module(h, emb, context)
-            h += guided_hint
-            guided_hint = None
-        else:
-            h = module(h, emb, context)
-        outs.append(zero_conv(h, emb, context))
-
-    h = self.middle_block(h, emb, context)
-    outs.append(self.middle_block_out(h, emb, context))
-
-    if patch_settings[pid].controlnet_softness > 0:
-        for i in range(10):
+    softness = settings().controlnet_softness
+    if softness > 0 and isinstance(out, dict):
+        outputs = out.get("output", [])
+        for i in range(min(10, len(outputs))):
             k = 1.0 - float(i) / 9.0
-            outs[i] = outs[i] * (1.0 - patch_settings[pid].controlnet_softness * k)
+            outputs[i] = outputs[i] * (1.0 - softness * k)
 
-    return outs
+    return out
 
 
-def patched_unet_forward(self, x, timesteps=None, context=None, y=None, control=None, transformer_options={}, **kwargs):
-    self.current_step = 1.0 - timesteps.to(x) / 999.0
-    patch_settings[os.getpid()].global_diffusion_progress = float(self.current_step.detach().cpu().numpy().tolist()[0])
-
-    y = timed_adm(y, timesteps)
-
-    transformer_options["original_shape"] = list(x.shape)
-    transformer_options["transformer_index"] = 0
-    transformer_patches = transformer_options.get("patches", {})
-
-    num_video_frames = kwargs.get("num_video_frames", self.default_num_video_frames)
-    image_only_indicator = kwargs.get("image_only_indicator", self.default_image_only_indicator)
-    time_context = kwargs.get("time_context", None)
-
-    assert (y is not None) == (
-            self.num_classes is not None
-    ), "must specify y if and only if the model is class-conditional"
-    hs = []
-    t_emb = ldm_patched.ldm.modules.diffusionmodules.openaimodel.timestep_embedding(timesteps, self.model_channels, repeat_only=False).to(x.dtype)
-    emb = self.time_embed(t_emb)
-
-    if self.num_classes is not None:
-        assert y.shape[0] == x.shape[0]
-        emb = emb + self.label_emb(y)
-
-    h = x
-    for id, module in enumerate(self.input_blocks):
-        transformer_options["block"] = ("input", id)
-        h = forward_timestep_embed(module, h, emb, context, transformer_options, time_context=time_context, num_video_frames=num_video_frames, image_only_indicator=image_only_indicator)
-        h = apply_control(h, control, 'input')
-        if "input_block_patch" in transformer_patches:
-            patch = transformer_patches["input_block_patch"]
-            for p in patch:
-                h = p(h, transformer_options)
-
-        hs.append(h)
-        if "input_block_patch_after_skip" in transformer_patches:
-            patch = transformer_patches["input_block_patch_after_skip"]
-            for p in patch:
-                h = p(h, transformer_options)
-
-    transformer_options["block"] = ("middle", 0)
-    h = forward_timestep_embed(self.middle_block, h, emb, context, transformer_options, time_context=time_context, num_video_frames=num_video_frames, image_only_indicator=image_only_indicator)
-    h = apply_control(h, control, 'middle')
-
-    for id, module in enumerate(self.output_blocks):
-        transformer_options["block"] = ("output", id)
-        hsp = hs.pop()
-        hsp = apply_control(hsp, control, 'output')
-
-        if "output_block_patch" in transformer_patches:
-            patch = transformer_patches["output_block_patch"]
-            for p in patch:
-                h, hsp = p(h, hsp, transformer_options)
-
-        h = torch.cat([h, hsp], dim=1)
-        del hsp
-        if len(hs) > 0:
-            output_shape = hs[-1].shape
-        else:
-            output_shape = None
-        h = forward_timestep_embed(module, h, emb, context, transformer_options, output_shape, time_context=time_context, num_video_frames=num_video_frames, image_only_indicator=image_only_indicator)
-    h = h.type(x.dtype)
-    if self.predict_codebook_ids:
-        return self.id_predictor(h)
-    else:
-        return self.out(h)
-
+# ---------------------------------------------------------------------------
+# 模型管理计时与权重加载纠错（与核心行为无关，保留）
+# ---------------------------------------------------------------------------
 
 def patched_load_models_gpu(*args, **kwargs):
     execution_start_time = time.perf_counter()
-    y = ldm_patched.modules.model_management.load_models_gpu_origin(*args, **kwargs)
+    y = comfy.model_management.load_models_gpu_origin(*args, **kwargs)
     moving_time = time.perf_counter() - execution_start_time
     if moving_time > 0.1:
-        print(f'[Fooocus Model Management] Moving model(s) has taken {moving_time:.2f} seconds')
+        print(f'[ReFocus Model Management] Moving model(s) has taken {moving_time:.2f} seconds')
     return y
 
 
@@ -475,8 +261,8 @@ def build_loaded(module, loader_name):
                         os.replace(path, corrupted_backup_file)
                         if os.path.exists(path):
                             os.remove(path)
-                        exp += f'Fooocus has tried to move the corrupted file to {corrupted_backup_file} \n'
-                        exp += f'You may try again now and Fooocus will download models again. \n'
+                        exp += f'ReFocus has tried to move the corrupted file to {corrupted_backup_file} \n'
+                        exp += f'You may try again now and ReFocus will download models again. \n'
             raise ValueError(exp)
         return result
 
@@ -484,28 +270,48 @@ def build_loaded(module, loader_name):
     return
 
 
+# ---------------------------------------------------------------------------
+# 安装
+# ---------------------------------------------------------------------------
+
+def _install(target, name, replacement):
+    """替换属性并立即断言确实生效。
+
+    这是防「静默失效」的闸：上游改了内部结构时，补丁可能装上但不再被调用，
+    或者干脆装不上。这里让它在启动时就报错，而不是悄悄失去效果。
+    """
+    setattr(target, name, replacement)
+    if getattr(target, name) is not replacement:
+        raise RuntimeError(
+            f'[ReFocus] Patch did not take effect: {getattr(target, "__name__", target)}.{name}. '
+            f'The vendored core may have changed; re-check modules/patch.py against upstream.'
+        )
+
+
 def patch_all():
-    if ldm_patched.modules.model_management.directml_enabled:
-        ldm_patched.modules.model_management.lowvram_available = True
-        ldm_patched.modules.model_management.OOM_EXCEPTION = Exception
+    global _cldm_forward_origin
 
-    patch_all_precision()
+    if comfy.model_management.directml_enabled:
+        comfy.model_management.lowvram_available = True
+        comfy.model_management.OOM_EXCEPTION = Exception
 
-    if not hasattr(ldm_patched.modules.model_management, 'load_models_gpu_origin'):
-        ldm_patched.modules.model_management.load_models_gpu_origin = ldm_patched.modules.model_management.load_models_gpu
+    if not hasattr(comfy.model_management, 'load_models_gpu_origin'):
+        comfy.model_management.load_models_gpu_origin = comfy.model_management.load_models_gpu
+    _install(comfy.model_management, 'load_models_gpu', patched_load_models_gpu)
 
-    ldm_patched.modules.model_management.load_models_gpu = patched_load_models_gpu
-    ldm_patched.modules.model_patcher.ModelPatcher.calculate_weight = calculate_weight_patched
-    ldm_patched.controlnet.cldm.ControlNet.forward = patched_cldm_forward
-    ldm_patched.ldm.modules.diffusionmodules.openaimodel.UNetModel.forward = patched_unet_forward
-    ldm_patched.modules.model_base.SDXL.encode_adm = sdxl_encode_adm_patched
-    ldm_patched.modules.samplers.KSamplerX0Inpaint.forward = patched_KSamplerX0Inpaint_forward
-    ldm_patched.k_diffusion.sampling.BrownianTreeNoiseSampler = BrownianTreeNoiseSamplerPatched
-    ldm_patched.modules.samplers.sampling_function = patched_sampling_function
+    # 只捕获一次原始 forward，重复调用 patch_all() 不会把它覆盖成补丁本身
+    if _cldm_forward_origin is None:
+        _cldm_forward_origin = comfy.cldm.cldm.ControlNet.forward
+    _install(comfy.cldm.cldm.ControlNet, 'forward', patched_cldm_forward)
+
+    _install(comfy.model_base.SDXL, 'encode_adm', sdxl_encode_adm_patched)
 
     warnings.filterwarnings(action='ignore', module='torchsde')
 
     build_loaded(safetensors.torch, 'load_file')
     build_loaded(torch, 'load')
+    for module, name in ((safetensors.torch, 'load_file'), (torch, 'load')):
+        if not hasattr(module, name + '_origin'):
+            raise RuntimeError(f'[ReFocus] Loader wrapper did not take effect: {name}.')
 
     return

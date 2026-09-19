@@ -1,14 +1,14 @@
 import torch
-import ldm_patched.modules.clip_vision
+import comfy.clip_vision
 import safetensors.torch as sf
-import ldm_patched.modules.model_management as model_management
-import ldm_patched.ldm.modules.attention as attention
+import comfy.model_management as model_management
+import comfy.ldm.modules.attention as attention
 
 from extras.resampler import Resampler
-from ldm_patched.modules.model_patcher import ModelPatcher
+from comfy.model_patcher import ModelPatcher
 from modules.core import numpy_to_pytorch
 from modules.ops import use_patched_ops
-from ldm_patched.modules.ops import manual_cast
+from comfy.ops import manual_cast
 
 
 SD_V12_CHANNELS = [320] * 4 + [640] * 4 + [1280] * 4 + [1280] * 6 + [640] * 6 + [320] * 6 + [1280] * 2
@@ -83,7 +83,7 @@ class IPAdapterModel(torch.nn.Module):
         self.ip_layers.load_state_dict_ordered(state_dict["ip_adapter"])
 
 
-clip_vision: ldm_patched.modules.clip_vision.ClipVisionModel = None
+clip_vision: comfy.clip_vision.ClipVisionModel = None
 ip_negative: torch.Tensor = None
 ip_adapters: dict = {}
 
@@ -92,7 +92,7 @@ def load_ip_adapter(clip_vision_path, ip_negative_path, ip_adapter_path):
     global clip_vision, ip_negative, ip_adapters
 
     if clip_vision is None and isinstance(clip_vision_path, str):
-        clip_vision = ldm_patched.modules.clip_vision.load(clip_vision_path)
+        clip_vision = comfy.clip_vision.load(clip_vision_path)
 
     if ip_negative is None and isinstance(ip_negative_path, str):
         ip_negative = sf.load_file(ip_negative_path)['data']
@@ -168,7 +168,7 @@ def preprocess(img, ip_adapter_path):
     global ip_adapters
     entry = ip_adapters[ip_adapter_path]
 
-    ldm_patched.modules.model_management.load_model_gpu(clip_vision.patcher)
+    comfy.model_management.load_model_gpu(clip_vision.patcher)
     pixel_values = clip_preprocess(numpy_to_pytorch(img).to(clip_vision.load_device))
     out = clip_vision.model(pixel_values=pixel_values, intermediate_output=-2)
 
@@ -184,10 +184,10 @@ def preprocess(img, ip_adapter_path):
 
     cond = cond.to(device=ip_adapter.load_device, dtype=ip_adapter.dtype)
 
-    ldm_patched.modules.model_management.load_model_gpu(image_proj_model)
+    comfy.model_management.load_model_gpu(image_proj_model)
     cond = image_proj_model.model(cond).to(device=ip_adapter.load_device, dtype=ip_adapter.dtype)
 
-    ldm_patched.modules.model_management.load_model_gpu(ip_layers)
+    comfy.model_management.load_model_gpu(ip_layers)
 
     if ip_unconds is None:
         uncond = ip_negative.to(device=ip_adapter.load_device, dtype=ip_adapter.dtype)

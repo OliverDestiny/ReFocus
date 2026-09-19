@@ -1,14 +1,13 @@
 import os
 import torch
 import modules.core as core
+import modules.comfy_ops as comfy_ops
 
-from ldm_patched.pfn.architecture.RRDB import RRDBNet as ESRGAN
-from ldm_patched.contrib.external_upscale_model import ImageUpscaleWithModel
+from extras.esrgan import RRDBNet as ESRGAN
 from collections import OrderedDict
 from modules.config import path_upscale_models
 
 model_filename = os.path.join(path_upscale_models, 'fooocus_upscaler.bin')
-opImageUpscaleWithModel = ImageUpscaleWithModel()
 model = None
 
 
@@ -28,7 +27,7 @@ def perform_upscale(img):
         model.eval()
 
     img = core.numpy_to_pytorch(img)
-    img = opImageUpscaleWithModel.upscale(model, img)[0]
+    img = comfy_ops.upscale_with_model(model, img)
     img = core.pytorch_to_numpy(img)[0]
 
     return img

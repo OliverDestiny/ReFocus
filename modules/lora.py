@@ -1,152 +1,55 @@
-def match_lora(lora, to_load):
+# This file is part of ReFocus.
+# Original work Copyright (c) 2023 lllyasviel (Fooocus) & 2024 ehristoforu (DeFooocus).
+# Modified and distributed under the terms of the GNU General Public License v3.0.
+
+"""LoRA / 补丁文件的解析。
+
+迁移到现代核心后不再自己实现格式解析：标准格式（lora / lokr / loha / glora / dora）
+交给 `comfy.lora.load_lora`，它返回现代 `calculate_weight` 认识的
+`WeightAdapterBase` 实例或 `("diff", (tensor,))` 补丁。
+
+这里只补一件核心不做的事：**Fooocus 的原始权重补丁**（`inpaint*.fooocus.patch`）。
+那种文件里的 key 与模型权重 key 完全同名，值是 `(w1, w_min, w_max)` 三元组：
+
+- 权重的 `w1` 是 uint8 量化值（0~255），`w_min`/`w_max` 是每行的真实范围；
+- bias 的 `w1` 已是 float32 真实值，此时 `w_min=0`、`w_max=255`，
+  同一条反量化公式会退化成恒等变换。
+
+所以统一用 `(w1 / 255) * (w_max - w_min) + w_min` 即可，两种情形都对
+（已对 inpaint_v26.fooocus.patch 实测确认）。
+"""
+
+import torch
+
+import comfy.lora
+
+
+def dequantize_raw_patch(value):
+    """把 Fooocus 原始权重补丁 (w1, w_min, w_max) 还原成真实权重。"""
+    w1, w_min, w_max = value
+    return (w1.float() / 255.0) * (w_max - w_min) + w_min
+
+
+def is_raw_patch(value):
+    return isinstance(value, tuple) and len(value) == 3
+
+
+def load_lora_patches(lora, to_load):
+    """解析出补丁字典，供 ModelPatcher.add_patches 使用。
+
+    lora   : 从补丁文件读出的 {key: tensor | (w1, w_min, w_max)}
+    to_load: {文件里的 key: 模型的 state_dict key}，即 comfy.lora.model_lora_keys_*
+    """
     patch_dict = {}
-    loaded_keys = set()
-    for x in to_load:
-        real_load_key = to_load[x]
-        if real_load_key in lora:
-            patch_dict[real_load_key] = ('fooocus', lora[real_load_key])
-            loaded_keys.add(real_load_key)
-            continue
 
-        alpha_name = "{}.alpha".format(x)
-        alpha = None
-        if alpha_name in lora.keys():
-            alpha = lora[alpha_name].item()
-            loaded_keys.add(alpha_name)
+    # Fooocus 原始权重补丁：值是三元组，直接反量化成 diff
+    for key, value in lora.items():
+        if is_raw_patch(value):
+            patch_dict[to_load.get(key, key)] = ("diff", (dequantize_raw_patch(value),))
 
-        regular_lora = "{}.lora_up.weight".format(x)
-        diffusers_lora = "{}_lora.up.weight".format(x)
-        transformers_lora = "{}.lora_linear_layer.up.weight".format(x)
-        A_name = None
+    # 其余交给核心；log_missing=False 是因为「不匹配当前模型」由调用方判断，
+    # 而 CLIP 侧的解析必然会看到一批未匹配的 UNet key，日志会很吵。
+    standard = comfy.lora.load_lora(lora, to_load, log_missing=False)
+    patch_dict.update(standard)
 
-        if regular_lora in lora.keys():
-            A_name = regular_lora
-            B_name = "{}.lora_down.weight".format(x)
-            mid_name = "{}.lora_mid.weight".format(x)
-        elif diffusers_lora in lora.keys():
-            A_name = diffusers_lora
-            B_name = "{}_lora.down.weight".format(x)
-            mid_name = None
-        elif transformers_lora in lora.keys():
-            A_name = transformers_lora
-            B_name ="{}.lora_linear_layer.down.weight".format(x)
-            mid_name = None
-
-        if A_name is not None:
-            mid = None
-            if mid_name is not None and mid_name in lora.keys():
-                mid = lora[mid_name]
-                loaded_keys.add(mid_name)
-            patch_dict[to_load[x]] = ("lora", (lora[A_name], lora[B_name], alpha, mid))
-            loaded_keys.add(A_name)
-            loaded_keys.add(B_name)
-
-
-        ######## loha
-        hada_w1_a_name = "{}.hada_w1_a".format(x)
-        hada_w1_b_name = "{}.hada_w1_b".format(x)
-        hada_w2_a_name = "{}.hada_w2_a".format(x)
-        hada_w2_b_name = "{}.hada_w2_b".format(x)
-        hada_t1_name = "{}.hada_t1".format(x)
-        hada_t2_name = "{}.hada_t2".format(x)
-        if hada_w1_a_name in lora.keys():
-            hada_t1 = None
-            hada_t2 = None
-            if hada_t1_name in lora.keys():
-                hada_t1 = lora[hada_t1_name]
-                hada_t2 = lora[hada_t2_name]
-                loaded_keys.add(hada_t1_name)
-                loaded_keys.add(hada_t2_name)
-
-            patch_dict[to_load[x]] = ("loha", (lora[hada_w1_a_name], lora[hada_w1_b_name], alpha, lora[hada_w2_a_name], lora[hada_w2_b_name], hada_t1, hada_t2))
-            loaded_keys.add(hada_w1_a_name)
-            loaded_keys.add(hada_w1_b_name)
-            loaded_keys.add(hada_w2_a_name)
-            loaded_keys.add(hada_w2_b_name)
-
-
-        ######## lokr
-        lokr_w1_name = "{}.lokr_w1".format(x)
-        lokr_w2_name = "{}.lokr_w2".format(x)
-        lokr_w1_a_name = "{}.lokr_w1_a".format(x)
-        lokr_w1_b_name = "{}.lokr_w1_b".format(x)
-        lokr_t2_name = "{}.lokr_t2".format(x)
-        lokr_w2_a_name = "{}.lokr_w2_a".format(x)
-        lokr_w2_b_name = "{}.lokr_w2_b".format(x)
-
-        lokr_w1 = None
-        if lokr_w1_name in lora.keys():
-            lokr_w1 = lora[lokr_w1_name]
-            loaded_keys.add(lokr_w1_name)
-
-        lokr_w2 = None
-        if lokr_w2_name in lora.keys():
-            lokr_w2 = lora[lokr_w2_name]
-            loaded_keys.add(lokr_w2_name)
-
-        lokr_w1_a = None
-        if lokr_w1_a_name in lora.keys():
-            lokr_w1_a = lora[lokr_w1_a_name]
-            loaded_keys.add(lokr_w1_a_name)
-
-        lokr_w1_b = None
-        if lokr_w1_b_name in lora.keys():
-            lokr_w1_b = lora[lokr_w1_b_name]
-            loaded_keys.add(lokr_w1_b_name)
-
-        lokr_w2_a = None
-        if lokr_w2_a_name in lora.keys():
-            lokr_w2_a = lora[lokr_w2_a_name]
-            loaded_keys.add(lokr_w2_a_name)
-
-        lokr_w2_b = None
-        if lokr_w2_b_name in lora.keys():
-            lokr_w2_b = lora[lokr_w2_b_name]
-            loaded_keys.add(lokr_w2_b_name)
-
-        lokr_t2 = None
-        if lokr_t2_name in lora.keys():
-            lokr_t2 = lora[lokr_t2_name]
-            loaded_keys.add(lokr_t2_name)
-
-        if (lokr_w1 is not None) or (lokr_w2 is not None) or (lokr_w1_a is not None) or (lokr_w2_a is not None):
-            patch_dict[to_load[x]] = ("lokr", (lokr_w1, lokr_w2, alpha, lokr_w1_a, lokr_w1_b, lokr_w2_a, lokr_w2_b, lokr_t2))
-
-        #glora
-        a1_name = "{}.a1.weight".format(x)
-        a2_name = "{}.a2.weight".format(x)
-        b1_name = "{}.b1.weight".format(x)
-        b2_name = "{}.b2.weight".format(x)
-        if a1_name in lora:
-            patch_dict[to_load[x]] = ("glora", (lora[a1_name], lora[a2_name], lora[b1_name], lora[b2_name], alpha))
-            loaded_keys.add(a1_name)
-            loaded_keys.add(a2_name)
-            loaded_keys.add(b1_name)
-            loaded_keys.add(b2_name)
-
-        w_norm_name = "{}.w_norm".format(x)
-        b_norm_name = "{}.b_norm".format(x)
-        w_norm = lora.get(w_norm_name, None)
-        b_norm = lora.get(b_norm_name, None)
-
-        if w_norm is not None:
-            loaded_keys.add(w_norm_name)
-            patch_dict[to_load[x]] = ("diff", (w_norm,))
-            if b_norm is not None:
-                loaded_keys.add(b_norm_name)
-                patch_dict["{}.bias".format(to_load[x][:-len(".weight")])] = ("diff", (b_norm,))
-
-        diff_name = "{}.diff".format(x)
-        diff_weight = lora.get(diff_name, None)
-        if diff_weight is not None:
-            patch_dict[to_load[x]] = ("diff", (diff_weight,))
-            loaded_keys.add(diff_name)
-
-        diff_bias_name = "{}.diff_b".format(x)
-        diff_bias = lora.get(diff_bias_name, None)
-        if diff_bias is not None:
-            patch_dict["{}.bias".format(to_load[x][:-len(".weight")])] = ("diff", (diff_bias,))
-            loaded_keys.add(diff_bias_name)
-
-    remaining_dict = {x: y for x, y in lora.items() if x not in loaded_keys}
-    return patch_dict, remaining_dict
+    return patch_dict

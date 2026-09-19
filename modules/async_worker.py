@@ -37,7 +37,7 @@ def worker():
     import modules.arg_schema as arg_schema
     import modules.controlnet_registry as controlnet_registry
     import modules.patch
-    import ldm_patched.modules.model_management
+    import comfy.model_management
     import modules.inpaint_worker as inpaint_worker
     import modules.constants as constants
     import extras.ip_adapter as ip_adapter
@@ -721,15 +721,15 @@ def worker():
         if scheduler_name == 'lcm':
             final_scheduler_name = 'sgm_uniform'
             if pipeline.final_unet is not None:
-                pipeline.final_unet = core.opModelSamplingDiscrete.patch(
+                pipeline.final_unet = core.apply_model_sampling_discrete(
                     pipeline.final_unet,
                     sampling='lcm',
-                    zsnr=False)[0]
+                    zsnr=False)
             if pipeline.final_refiner_unet is not None:
-                pipeline.final_refiner_unet = core.opModelSamplingDiscrete.patch(
+                pipeline.final_refiner_unet = core.apply_model_sampling_discrete(
                     pipeline.final_refiner_unet,
                     sampling='lcm',
-                    zsnr=False)[0]
+                    zsnr=False)
             print('Using lcm scheduler.')
 
         async_task.yields.append(['preview', (13, 'Moving model to GPU ...', None)])
@@ -746,7 +746,7 @@ def worker():
 
             try:
                 if async_task.last_stop is not False:
-                    ldm_patched.model_management.interrupt_current_processing()
+                    comfy.model_management.interrupt_current_processing()
                 positive_cond, negative_cond = task['c'], task['uc']
 
                 if 'cn' in goals:
@@ -830,7 +830,7 @@ def worker():
                 yield_result(async_task, img_paths, black_out_nsfw, do_not_show_finished_images=len(tasks) == 1
                              or disable_intermediate_results or sampler_name == 'lcm',
                              progressbar_index=int(15.0 + 85.0 * float((current_task_id + 1) * steps) / float(all_steps)))
-            except ldm_patched.modules.model_management.InterruptProcessingException as e:
+            except comfy.model_management.InterruptProcessingException as e:
                 if async_task.last_stop == 'skip':
                     print('User skipped')
                     async_task.last_stop = False

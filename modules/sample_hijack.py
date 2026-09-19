@@ -1,28 +1,32 @@
+# This file is part of ReFocus.
+# Original work Copyright (c) 2023 lllyasviel (Fooocus) & 2024 ehristoforu (DeFooocus).
+# Modified and distributed under the terms of the GNU General Public License v3.0.
+
+"""跨模型条件切换的工具 + 核心调度器表的补充注册。
+
+迁移到现代核心后，这里原来的 `sample_hacked`（旧 `samplers.sample` 的整份拷贝，用来做
+refiner 中途切换）已删除——它依赖的 `wrap_model` 在现代核心中不存在，而 refiner 切换
+现在由 `process_diffusion` 的原生两遍采样完成。同理 `calculate_sigmas_scheduler_hacked`
+也已删除，改为往核心的 `SCHEDULER_HANDLERS` 注册。
+
+剩下的 `clip_separate*` 不是补丁，是纯工具：把文本条件按目标模型切分
+（SDXLRefiner 取后 1280 维、SDXL 原样、SD1.5 取前 768 维并重跑 clip_l 的 final_layer_norm）。
+"""
+
 import torch
-import ldm_patched.modules.samplers
-import ldm_patched.modules.model_management
 
-from collections import namedtuple
-from ldm_patched.contrib.external_custom_sampler import SDTurboScheduler
-from ldm_patched.k_diffusion import sampling as k_diffusion_sampling
-from ldm_patched.modules.samplers import normal_scheduler, simple_scheduler, ddim_scheduler
-from ldm_patched.modules.model_base import SDXLRefiner, SDXL
-from ldm_patched.modules.conds import CONDRegular
-from ldm_patched.modules.sample import get_additional_models, get_models_from_cond, cleanup_additional_models
-from ldm_patched.modules.samplers import resolve_areas_and_cond_masks, wrap_model, calculate_start_end_timesteps, \
-    create_cond_with_same_area_if_none, pre_run_control, apply_empty_x_to_equal_area, encode_model_conds
+import comfy.model_base
+import comfy.samplers
 
-
-current_refiner = None
-refiner_switch_step = -1
+import modules.comfy_ops as comfy_ops
 
 
 @torch.no_grad()
 @torch.inference_mode()
 def clip_separate_inner(c, p, target_model=None, target_clip=None):
-    if target_model is None or isinstance(target_model, SDXLRefiner):
+    if target_model is None or isinstance(target_model, comfy.model_base.SDXLRefiner):
         c = c[..., -1280:].clone()
-    elif isinstance(target_model, SDXL):
+    elif isinstance(target_model, comfy.model_base.SDXL):
         c = c.clone()
     else:
         p = None
@@ -62,123 +66,23 @@ def clip_separate(cond, target_model=None, target_clip=None):
     return results
 
 
-@torch.no_grad()
-@torch.inference_mode()
-def clip_separate_after_preparation(cond, target_model=None, target_clip=None):
-    results = []
+def register_extra_schedulers():
+    """把核心没有、但 UI 暴露的调度器注册进去。
 
-    for x in cond:
-        p = x.get('pooled_output', None)
-        c = x['model_conds']['c_crossattn'].cond
+    `turbo` 与 `lcm` 不在现代 `SCHEDULER_HANDLERS` 里，而 `KSampler.__init__` 对未知
+    调度器会**静默降级为 `SCHEDULERS[0]`（simple）**——不报错，只是换了算法。
+    所以必须显式注册。
 
-        c, p = clip_separate_inner(c, p, target_model=target_model, target_clip=target_clip)
+    `lcm` 不在此处注册：`async_worker` 在 LCM 模式下会先把调度器改写成 `sgm_uniform`
+    （核心已有），`lcm` 只作为 UI 选项存在。
 
-        result = {'model_conds': {'c_crossattn': CONDRegular(c)}}
-
-        if p is not None:
-            result['pooled_output'] = p.clone()
-
-        results.append(result)
-
-    return results
+    `SCHEDULER_NAMES` 是独立的一份 list，`KSampler.SCHEDULERS` 引用的正是它，
+    因此必须原地 append 而不是重新赋值。
+    """
+    if 'turbo' not in comfy.samplers.SCHEDULER_HANDLERS:
+        comfy.samplers.SCHEDULER_HANDLERS['turbo'] = comfy.samplers.SchedulerHandler(comfy_ops.turbo_sigmas)
+        comfy.samplers.SCHEDULER_NAMES.append('turbo')
+    return
 
 
-@torch.no_grad()
-@torch.inference_mode()
-def sample_hacked(model, noise, positive, negative, cfg, device, sampler, sigmas, model_options={}, latent_image=None, denoise_mask=None, callback=None, disable_pbar=False, seed=None):
-    global current_refiner
-
-    positive = positive[:]
-    negative = negative[:]
-
-    resolve_areas_and_cond_masks(positive, noise.shape[2], noise.shape[3], device)
-    resolve_areas_and_cond_masks(negative, noise.shape[2], noise.shape[3], device)
-
-    model_wrap = wrap_model(model)
-
-    calculate_start_end_timesteps(model, negative)
-    calculate_start_end_timesteps(model, positive)
-
-    if latent_image is not None:
-        latent_image = model.process_latent_in(latent_image)
-
-    if hasattr(model, 'extra_conds'):
-        positive = encode_model_conds(model.extra_conds, positive, noise, device, "positive", latent_image=latent_image, denoise_mask=denoise_mask)
-        negative = encode_model_conds(model.extra_conds, negative, noise, device, "negative", latent_image=latent_image, denoise_mask=denoise_mask)
-
-    #make sure each cond area has an opposite one with the same area
-    for c in positive:
-        create_cond_with_same_area_if_none(negative, c)
-    for c in negative:
-        create_cond_with_same_area_if_none(positive, c)
-
-    # pre_run_control(model, negative + positive)
-    pre_run_control(model, positive)  # negative is not necessary in Fooocus, 0.5s faster.
-
-    apply_empty_x_to_equal_area(list(filter(lambda c: c.get('control_apply_to_uncond', False) == True, positive)), negative, 'control', lambda cond_cnets, x: cond_cnets[x])
-    apply_empty_x_to_equal_area(positive, negative, 'gligen', lambda cond_cnets, x: cond_cnets[x])
-
-    extra_args = {"cond":positive, "uncond":negative, "cond_scale": cfg, "model_options": model_options, "seed":seed}
-
-    if current_refiner is not None and hasattr(current_refiner.model, 'extra_conds'):
-        positive_refiner = clip_separate_after_preparation(positive, target_model=current_refiner.model)
-        negative_refiner = clip_separate_after_preparation(negative, target_model=current_refiner.model)
-
-        positive_refiner = encode_model_conds(current_refiner.model.extra_conds, positive_refiner, noise, device, "positive", latent_image=latent_image, denoise_mask=denoise_mask)
-        negative_refiner = encode_model_conds(current_refiner.model.extra_conds, negative_refiner, noise, device, "negative", latent_image=latent_image, denoise_mask=denoise_mask)
-
-    def refiner_switch():
-        cleanup_additional_models(set(get_models_from_cond(positive, "control") + get_models_from_cond(negative, "control")))
-
-        extra_args["cond"] = positive_refiner
-        extra_args["uncond"] = negative_refiner
-
-        # clear ip-adapter for refiner
-        extra_args['model_options'] = {k: {} if k == 'transformer_options' else v for k, v in extra_args['model_options'].items()}
-
-        models, inference_memory = get_additional_models(positive_refiner, negative_refiner, current_refiner.model_dtype())
-        ldm_patched.modules.model_management.load_models_gpu(
-            [current_refiner] + models,
-            model.memory_required([noise.shape[0] * 2] + list(noise.shape[1:])) + inference_memory)
-
-        model_wrap.inner_model = current_refiner.model
-        print('Refiner Swapped')
-        return
-
-    def callback_wrap(step, x0, x, total_steps):
-        if step == refiner_switch_step and current_refiner is not None:
-            refiner_switch()
-        if callback is not None:
-            # residual_noise_preview = x - x0
-            # residual_noise_preview /= residual_noise_preview.std()
-            # residual_noise_preview *= x0.std()
-            callback(step, x0, x, total_steps)
-
-    samples = sampler.sample(model_wrap, sigmas, extra_args, callback_wrap, noise, latent_image, denoise_mask, disable_pbar)
-    return model.process_latent_out(samples.to(torch.float32))
-
-
-@torch.no_grad()
-@torch.inference_mode()
-def calculate_sigmas_scheduler_hacked(model, scheduler_name, steps):
-    if scheduler_name == "karras":
-        sigmas = k_diffusion_sampling.get_sigmas_karras(n=steps, sigma_min=float(model.model_sampling.sigma_min), sigma_max=float(model.model_sampling.sigma_max))
-    elif scheduler_name == "exponential":
-        sigmas = k_diffusion_sampling.get_sigmas_exponential(n=steps, sigma_min=float(model.model_sampling.sigma_min), sigma_max=float(model.model_sampling.sigma_max))
-    elif scheduler_name == "normal":
-        sigmas = normal_scheduler(model, steps)
-    elif scheduler_name == "simple":
-        sigmas = simple_scheduler(model, steps)
-    elif scheduler_name == "ddim_uniform":
-        sigmas = ddim_scheduler(model, steps)
-    elif scheduler_name == "sgm_uniform":
-        sigmas = normal_scheduler(model, steps, sgm=True)
-    elif scheduler_name == "turbo":
-        sigmas = SDTurboScheduler().get_sigmas(namedtuple('Patcher', ['model'])(model=model), steps=steps, denoise=1.0)[0]
-    else:
-        raise TypeError("error invalid scheduler")
-    return sigmas
-
-
-ldm_patched.modules.samplers.calculate_sigmas_scheduler = calculate_sigmas_scheduler_hacked
-ldm_patched.modules.samplers.sample = sample_hacked
+register_extra_schedulers()

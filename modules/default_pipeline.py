@@ -7,12 +7,13 @@ import os
 import torch
 import modules.patch
 import modules.config
-import ldm_patched.modules.model_management
-import ldm_patched.modules.latent_formats
+import comfy.model_management
+import comfy.samplers
+import comfy.model_base
 import modules.inpaint_worker
 import extras.vae_interpose as vae_interpose
 
-from ldm_patched.modules.model_base import SDXL, SDXLRefiner
+from comfy.model_base import SDXL, SDXLRefiner
 from modules.sample_hijack import clip_separate
 
 
@@ -210,7 +211,7 @@ def prepare_text_encoder(async_call=True):
         # TODO: make sure that this is always called in an async way so that users cannot feel it.
         pass
     assert_model_integrity()
-    ldm_patched.modules.model_management.load_models_gpu([final_clip.patcher])
+    comfy.model_management.load_models_gpu([final_clip.patcher])
     return
 
 
@@ -244,6 +245,13 @@ def refresh_everything(refiner_model_name, base_model_name, loras,
     final_refiner_unet = model_refiner.unet_with_lora
     final_refiner_vae = model_refiner.vae
 
+    # 把 CFG 钩子（锐度 / adaptive CFG / eps_record）挂到两个 unet 上。
+    # 这替代了原来对 comfy.samplers.sampling_function 的猴子补丁。
+    if final_unet is not None:
+        modules.patch.attach_cfg_function(final_unet)
+    if final_refiner_unet is not None and final_refiner_unet is not final_unet:
+        modules.patch.attach_cfg_function(final_refiner_unet)
+
     prepare_text_encoder(async_call=True)
     clear_all_caches()
     return
@@ -269,14 +277,16 @@ def vae_parse(latent):
 @torch.no_grad()
 @torch.inference_mode()
 def calculate_sigmas_all(sampler, model, scheduler, steps):
-    from ldm_patched.modules.samplers import calculate_sigmas_scheduler
-
+    """model 传 ModelPatcher（不是 BaseModel），以便取到被 add_object_patch 替换过的
+    model_sampling —— LCM 模式就是这么改采样方式的，取错会让 sigma 与实际采样不一致。"""
     discard_penultimate_sigma = False
     if sampler in ['dpm_2', 'dpm_2_ancestral']:
         steps += 1
         discard_penultimate_sigma = True
 
-    sigmas = calculate_sigmas_scheduler(model, scheduler, steps)
+    # 现代 API：calculate_sigmas(model_sampling, scheduler_name, steps)
+    # turbo 由 modules.sample_hijack 注册进核心的 SCHEDULER_HANDLERS。
+    sigmas = comfy.samplers.calculate_sigmas(model.get_model_object("model_sampling"), scheduler, steps)
 
     if discard_penultimate_sigma:
         sigmas = torch.cat([sigmas[:-2], sigmas[-1:]])
@@ -341,14 +351,21 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
     target_unet, target_vae, target_refiner_unet, target_refiner_vae, target_clip \
         = final_unet, final_vae, final_refiner_unet, final_refiner_vae, final_clip
 
-    assert refiner_swap_method in ['joint', 'separate', 'vae']
+    # 'joint' 是旧的「采样中途换 refiner」，它依赖已被删除的 sample_hacked
+    #（旧 samplers.sample 的整份拷贝，而现代核心没有 wrap_model）。
+    # 现在统一走原生两遍采样 'separate'，因此把 'joint' 归一化成它。
+    # 已知差异：两遍采样与旧的中途切换不是逐位相同（见 D4 数值差异实测）。
+    if refiner_swap_method == 'joint':
+        refiner_swap_method = 'separate'
+
+    assert refiner_swap_method in ['separate', 'vae']
 
     if final_refiner_vae is not None and final_refiner_unet is not None:
         # Refiner Use Different VAE (then it is SD15)
         if denoise > 0.9:
             refiner_swap_method = 'vae'
         else:
-            refiner_swap_method = 'joint'
+            refiner_swap_method = 'separate'
             if denoise > (float(steps - switch) / float(steps)) ** 0.834:  # karras 0.834
                 target_unet, target_vae, target_refiner_unet, target_refiner_vae \
                     = final_unet, final_vae, None, None
@@ -367,38 +384,15 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
     else:
         initial_latent = latent
 
-    minmax_sigmas = calculate_sigmas(sampler=sampler_name, scheduler=scheduler_name, model=final_unet.model, steps=steps, denoise=denoise)
+    # 这两个值现在只用于日志与校验：噪声场由现代 sampler 自己按 sigmas 构建，
+    # 不再需要 BrownianTreeNoiseSamplerPatched.global_init 预置一棵共享的树。
+    minmax_sigmas = calculate_sigmas(sampler=sampler_name, scheduler=scheduler_name, model=final_unet, steps=steps, denoise=denoise)
     sigma_min, sigma_max = minmax_sigmas[minmax_sigmas > 0].min(), minmax_sigmas.max()
     sigma_min = float(sigma_min.cpu().numpy())
     sigma_max = float(sigma_max.cpu().numpy())
     print(f'[Sampler] sigma_min = {sigma_min}, sigma_max = {sigma_max}')
 
-    modules.patch.BrownianTreeNoiseSamplerPatched.global_init(
-        initial_latent['samples'].to(ldm_patched.modules.model_management.get_torch_device()),
-        sigma_min, sigma_max, seed=image_seed, cpu=False)
-
     decoded_latent = None
-
-    if refiner_swap_method == 'joint':
-        sampled_latent = core.ksampler(
-            model=target_unet,
-            refiner=target_refiner_unet,
-            positive=positive_cond,
-            negative=negative_cond,
-            latent=initial_latent,
-            steps=steps, start_step=0, last_step=steps, disable_noise=False, force_full_denoise=True,
-            seed=image_seed,
-            denoise=denoise,
-            callback_function=callback,
-            cfg=cfg_scale,
-            sampler_name=sampler_name,
-            scheduler=scheduler_name,
-            refiner_switch=switch,
-            previewer_start=0,
-            previewer_end=steps,
-            disable_preview=disable_preview
-        )
-        decoded_latent = core.decode_vae(vae=target_vae, latent_image=sampled_latent, tiled=tiled)
 
     if refiner_swap_method == 'separate':
         sampled_latent = core.ksampler(
@@ -447,7 +441,7 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
         decoded_latent = core.decode_vae(vae=target_model, latent_image=sampled_latent, tiled=tiled)
 
     if refiner_swap_method == 'vae':
-        modules.patch.patch_settings[os.getpid()].eps_record = 'vae'
+        modules.patch.settings().eps_record = 'vae'
 
         if modules.inpaint_worker.current_task is not None:
             modules.inpaint_worker.current_task.unswap()
@@ -480,12 +474,12 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
         k_sigmas = 1.4
         sigmas = calculate_sigmas(sampler=sampler_name,
                                   scheduler=scheduler_name,
-                                  model=target_model.model,
+                                  model=target_model,
                                   steps=steps,
                                   denoise=denoise)[switch:] * k_sigmas
         len_sigmas = len(sigmas) - 1
 
-        noise_mean = torch.mean(modules.patch.patch_settings[os.getpid()].eps_record, dim=1, keepdim=True)
+        noise_mean = torch.mean(modules.patch.settings().eps_record, dim=1, keepdim=True)
 
         if modules.inpaint_worker.current_task is not None:
             modules.inpaint_worker.current_task.swap()
@@ -515,5 +509,5 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
         decoded_latent = core.decode_vae(vae=target_model, latent_image=sampled_latent, tiled=tiled)
 
     images = core.pytorch_to_numpy(decoded_latent)
-    modules.patch.patch_settings[os.getpid()].eps_record = None
+    modules.patch.settings().eps_record = None
     return images

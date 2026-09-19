@@ -164,12 +164,14 @@ def model_sampling_discrete_patch(model, sampling, zsnr=False):
 
 # ---------------------------------------------------------------------------
 # SDTurboScheduler（来源：comfy_extras/nodes_custom_sampler.py）
+# 参数从「模型」改成「model_sampling」，以便直接注册进 SCHEDULER_HANDLERS
+# （该表的 use_ms=True 约定就是 handler(model_sampling, steps)）。
 # ---------------------------------------------------------------------------
 
-def turbo_sigmas(model, steps, denoise=1.0):
+def turbo_sigmas(model_sampling, steps, denoise=1.0):
     start_step = 10 - int(10 * denoise)
     timesteps = torch.flip(torch.arange(1, 11) * 100 - 1, (0,))[start_step:start_step + steps]
-    sigmas = model.get_model_object("model_sampling").sigma(timesteps)
+    sigmas = model_sampling.sigma(timesteps)
     sigmas = torch.cat([sigmas, sigmas.new_zeros([1])])
     return sigmas
 
@@ -264,3 +266,36 @@ def controlnet_apply_advanced(positive, negative, control_net, image, strength, 
             c.append(n)
         out.append(c)
     return (out[0], out[1])
+
+
+# ---------------------------------------------------------------------------
+# 图像放大（来源：nodes.py ImageUpscaleWithModel）
+# 与 VAE 的 tiled 编解码同理，comfy.utils.tiled_scale 带 @torch.inference_mode()，
+# 所以本函数也必须在 inference_mode 内调用（ReFocus 的 handler 满足）。
+# ---------------------------------------------------------------------------
+
+def upscale_with_model(upscale_model, image, tile=512, overlap=32):
+    """用放大模型跑分块放大。image 是 BHWC，返回同为 BHWC。"""
+    import comfy.utils
+
+    device = comfy.model_management.get_torch_device()
+    upscale_model.to(device)
+    in_img = image.movedim(-1, -3).to(device)
+
+    oom = True
+    while oom:
+        try:
+            steps = comfy.utils.get_tiled_scale_steps(in_img.shape[3], in_img.shape[2],
+                                                     tile_x=tile, tile_y=tile, overlap=overlap)
+            pbar = comfy.utils.ProgressBar(steps)
+            out = comfy.utils.tiled_scale(in_img, lambda a: upscale_model(a),
+                                         tile_x=tile, tile_y=tile, overlap=overlap,
+                                         upscale_amount=upscale_model.scale, pbar=pbar)
+            oom = False
+        except comfy.model_management.OOM_EXCEPTION as e:
+            tile //= 2
+            if tile < 128:
+                raise e
+
+    upscale_model.cpu()
+    return torch.clamp(out.movedim(-3, -1), min=0, max=1.0)

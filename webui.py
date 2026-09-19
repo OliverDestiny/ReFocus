@@ -92,7 +92,7 @@ def generate_clicked(task):
         yield gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True, value=[])
         return
 
-    import ldm_patched.modules.model_management as model_management
+    import comfy.model_management as model_management
     with model_management.interrupt_processing_mutex:
         model_management.interrupt_processing = False
 
@@ -297,14 +297,14 @@ with gradio_root:
                     stop_button = gr.Button(value="Stop", elem_classes='type_row_half', elem_id='stop_button', visible=False)
 
                     def stop_clicked(currentTask):
-                        import ldm_patched.modules.model_management as model_management
+                        import comfy.model_management as model_management
                         currentTask.last_stop = 'stop'
                         if (currentTask.processing):
                             model_management.interrupt_current_processing()
                         return currentTask
 
                     def skip_clicked(currentTask):
-                        import ldm_patched.modules.model_management as model_management
+                        import comfy.model_management as model_management
                         currentTask.last_stop = 'skip'
                         if (currentTask.processing):
                             model_management.interrupt_current_processing()
