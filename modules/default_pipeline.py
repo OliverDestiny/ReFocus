@@ -248,9 +248,9 @@ def refresh_everything(refiner_model_name, base_model_name, loras,
     # 把 CFG 钩子（锐度 / adaptive CFG / eps_record）挂到两个 unet 上。
     # 这替代了原来对 comfy.samplers.sampling_function 的猴子补丁。
     if final_unet is not None:
-        modules.patch.attach_cfg_function(final_unet)
+        modules.patch.attach_model_hooks(final_unet)
     if final_refiner_unet is not None and final_refiner_unet is not final_unet:
-        modules.patch.attach_cfg_function(final_refiner_unet)
+        modules.patch.attach_model_hooks(final_refiner_unet)
 
     prepare_text_encoder(async_call=True)
     clear_all_caches()

@@ -193,10 +193,26 @@ def custom_sampler_cfg_function(args):
     return final_eps
 
 
-def attach_cfg_function(model):
-    """把 CFG 钩子挂到模型上。base 与 refiner 两个 unet 都要挂。"""
+def attach_model_hooks(model):
+    """把 CFG 钩子与 UNet 包装器挂到模型上。base 与 refiner 两个 unet 都要挂。
+
+    为什么需要 model_function_wrapper：旧实现删掉的 `patched_unet_forward` 里有一步
+    `y = timed_adm(y, timesteps)`，把 Fooocus 的双份 ADM（5632 维）在进入 label_emb 前
+    压回 2816。删掉那个 forward 之后没人做这件事，于是 5632 直接喂给期望 2816 的
+    label_emb，报 "mat1 and mat2 shapes cannot be multiplied (2x5632 and 2816x1280)"。
+    现在用核心冻结的 model_function_wrapper 挂在同一位置。
+    """
     model.set_model_sampler_cfg_function(custom_sampler_cfg_function)
+    model.set_model_unet_function_wrapper(unet_function_wrapper)
     return model
+
+
+def unet_function_wrapper(apply_model, args):
+    """上游在 calc_cond_batch 里以 (model.apply_model, {...}) 调用本包装器。"""
+    c = args["c"]
+    if c.get("y") is not None:
+        c["y"] = timed_adm(c["y"], args["timestep"])
+    return apply_model(args["input"], args["timestep"], **c)
 
 
 # ---------------------------------------------------------------------------
