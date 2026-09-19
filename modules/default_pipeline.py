@@ -314,6 +314,29 @@ def get_candidate_vae(steps, switch, denoise=1.0, refiner_swap_method='joint'):
 
 @torch.no_grad()
 @torch.inference_mode()
+def prepare_img2img_latent(pixels, steps, switch, denoise, refiner_swap_method='joint', tiled=False):
+    """把像素编码成图生图用的初始 latent。
+
+    pixels 必须由调用方先缩放好：各调用方的目标尺寸策略不同（vary 夹到 1024~2048、
+    upscale 按 64 对齐后重采样），这一步不在这里统一。
+
+    返回 (initial_latent, candidate_vae, candidate_vae_swap, width, height)，
+    其中 width/height 由 latent 反推，调用方需用它们覆盖自己的尺寸变量。
+    """
+    candidate_vae, candidate_vae_swap = get_candidate_vae(
+        steps=steps,
+        switch=switch,
+        denoise=denoise,
+        refiner_swap_method=refiner_swap_method
+    )
+
+    latent = core.encode_vae(vae=candidate_vae, pixels=core.numpy_to_pytorch(pixels), tiled=tiled)
+    _, _, latent_height, latent_width = latent['samples'].shape
+    return {'samples': latent['samples']}, candidate_vae, candidate_vae_swap, latent_width * 8, latent_height * 8
+
+
+@torch.no_grad()
+@torch.inference_mode()
 def process_diffusion(positive_cond, negative_cond, steps, switch, width, height, image_seed, callback, sampler_name, scheduler_name, latent=None, denoise=1.0, tiled=False, cfg_scale=7.0, refiner_swap_method='joint', disable_preview=False):
     target_unet, target_vae, target_refiner_unet, target_refiner_vae, target_clip \
         = final_unet, final_vae, final_refiner_unet, final_refiner_vae, final_clip

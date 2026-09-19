@@ -76,10 +76,6 @@ function processNode(node) {
     });
 }
 
-function refresh_style_localization() {
-    processNode(document.querySelector('.style_selections'));
-}
-
 function localizeWholePage() {
     processNode(gradioApp());
 

@@ -7,6 +7,7 @@ import modules.config
 import ReFocus_version
 import modules.html
 import modules.async_worker as worker
+import modules.arg_schema as arg_schema
 import modules.constants as constants
 import modules.flags as flags
 import modules.meta_parser
@@ -57,6 +58,22 @@ PHOTOPEA_IFRAME_LOADED_EVENT = "onPhotopeaLoaded"
 def get_photopea_url_params():
     return "#%7B%22resources%22:%5B%22data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIAAQMAAADOtka5AAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAADZJREFUeJztwQEBAAAAgiD/r25IQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfBuCAAAB0niJ8AAAAABJRU5ErkJggg==%22%5D%7D"
 
+def add_ctrl_group(ctrls, group_name, components):
+    """按 modules/arg_schema.py 的分组登记 worker 参数。
+
+    UI 与 worker 靠位置对齐，顺序表在 arg_schema 里。长度不符时立即报错，
+    避免后续所有参数静默错位（症状是"某个设置莫名不生效"）。
+    """
+    expected = len(arg_schema.group(group_name).args)
+    if len(components) != expected:
+        raise RuntimeError(
+            f'[ReFocus] Argument contract mismatch in group "{group_name}": '
+            f'UI provides {len(components)} components, schema expects {expected}. '
+            f'Update modules/arg_schema.py together with both ends.'
+        )
+    ctrls.extend(components)
+
+
 def get_task(*args):
     args = list(args)
     if not args:
@@ -91,8 +108,8 @@ def generate_clicked(task):
         print("[Warning] generate_clicked got empty args, not appending to async_tasks.")
         yield gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True, value=[])
         return
-    elif len(task.args) < 40:
-        print("[Warning] generate_clicked got incomplete args (len < 40), not appending to async_tasks.")
+    elif len(task.args) != arg_schema.total():
+        print(f"[Warning] generate_clicked expected {arg_schema.total()} args but got {len(task.args)}, not appending to async_tasks.")
         yield gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True, value=[])
         return
 
@@ -939,8 +956,6 @@ with gradio_root:
                 show_progress=True
             )
 
-        output_format.input(lambda x: gr.update(output_format=x), inputs=output_format)
-
         advanced_checkbox.change(lambda x: gr.update(visible=x), advanced_checkbox, advanced_column,
                                  queue=False, show_progress=False) \
             .then(fn=lambda: None, js='refresh_grid_delayed', queue=False, show_progress=False)
@@ -999,29 +1014,37 @@ with gradio_root:
         )
 
         ctrls = [currentTask]
-        ctrls += [
-            prompt, negative_prompt, translate_prompts, 
-            steps_slider, aspect_ratios_selection, image_number, output_format, image_seed, sharpness, guidance_scale
-        ]
 
-        ctrls += [base_model, refiner_model, refiner_switch] + lora_ctrls
-        ctrls += [input_image_checkbox, current_tab]
-        ctrls += [uov_mode, uov_vary_mode, uov_scale, uov_fast, uov_ignore_prompt, uov_denoise_state, uov_input_image]
-        ctrls += [gr.State([]), inpaint_data_legacy, inpaint_additional_prompt]
-        ctrls += [disable_preview, disable_intermediate_results, black_out_nsfw]
-        ctrls += [adm_scaler_positive, adm_scaler_negative, adm_scaler_end, adaptive_cfg]
-        ctrls += [sampler_name, scheduler_name]
-        ctrls += [overwrite_step, overwrite_switch, overwrite_width, overwrite_height, overwrite_vary_strength]
-        ctrls += [overwrite_upscale_strength, mixing_image_prompt_and_vary_upscale, mixing_image_prompt_and_inpaint]
-        ctrls += [debugging_cn_preprocessor, skipping_cn_preprocessor, canny_low_threshold, canny_high_threshold]
-        ctrls += [refiner_swap_method, controlnet_softness]
-        ctrls += freeu_ctrls
-        ctrls += inpaint_ctrls
+        add_ctrl_group(ctrls, 'generation', [
+            prompt, negative_prompt, translate_prompts,
+            steps_slider, aspect_ratios_selection, image_number, output_format, image_seed, sharpness, guidance_scale
+        ])
+        add_ctrl_group(ctrls, 'models', [base_model, refiner_model, refiner_switch] + lora_ctrls)
+        add_ctrl_group(ctrls, 'input_image_mode', [input_image_checkbox, current_tab])
+        add_ctrl_group(ctrls, 'uov', [uov_mode, uov_vary_mode, uov_scale, uov_fast, uov_ignore_prompt, uov_denoise_state, uov_input_image])
+        add_ctrl_group(ctrls, 'inpaint_input', [gr.State([]), inpaint_data_legacy, inpaint_additional_prompt])
+        add_ctrl_group(ctrls, 'output_flags', [disable_preview, disable_intermediate_results, black_out_nsfw])
+        add_ctrl_group(ctrls, 'adm', [adm_scaler_positive, adm_scaler_negative, adm_scaler_end, adaptive_cfg])
+        add_ctrl_group(ctrls, 'sampler', [sampler_name, scheduler_name])
+        add_ctrl_group(ctrls, 'overwrite', [overwrite_step, overwrite_switch, overwrite_width, overwrite_height, overwrite_vary_strength])
+        add_ctrl_group(ctrls, 'mixing', [overwrite_upscale_strength, mixing_image_prompt_and_vary_upscale, mixing_image_prompt_and_inpaint])
+        add_ctrl_group(ctrls, 'controlnet_debug', [debugging_cn_preprocessor, skipping_cn_preprocessor, canny_low_threshold, canny_high_threshold])
+        add_ctrl_group(ctrls, 'refiner', [refiner_swap_method, controlnet_softness])
+        add_ctrl_group(ctrls, 'freeu', freeu_ctrls)
+        add_ctrl_group(ctrls, 'inpaint', inpaint_ctrls)
 
         if not args_manager.args.disable_metadata:
-            ctrls += [save_metadata_to_images, metadata_scheme]
+            add_ctrl_group(ctrls, 'metadata', [save_metadata_to_images, metadata_scheme])
 
-        ctrls += ip_ctrls
+        add_ctrl_group(ctrls, 'image_prompt', ip_ctrls)
+
+        expected_total = arg_schema.total() + 1  # +1 是 currentTask
+        if len(ctrls) != expected_total:
+            raise RuntimeError(
+                f'[ReFocus] Argument contract mismatch: ctrls has {len(ctrls)} entries, '
+                f'schema expects {expected_total}. '
+                f'Update modules/arg_schema.py together with both ends.'
+            )
 
         def parse_meta(raw_prompt_txt, is_generating):
             loaded_json = None

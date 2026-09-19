@@ -35,6 +35,7 @@ def worker():
     import modules.core as core
     import modules.flags as flags
     import modules.config
+    import modules.arg_schema as arg_schema
     import modules.patch
     import ldm_patched.modules.model_management
     import extras.preprocessors as preprocessors
@@ -90,78 +91,89 @@ def worker():
         args = async_task.args
         args.reverse()
 
-        prompt = args.pop() or ''
-        negative_prompt = args.pop() or ''
-        translate_prompts = args.pop()
-        steps = args.pop()
-        aspect_ratios_selection = args.pop()
-        image_number = args.pop()
-        output_format = args.pop()
-        image_seed = args.pop()
-        sharpness = args.pop()
-        guidance_scale = args.pop()
-        base_model_name = args.pop()
-        refiner_model_name = args.pop()
-        refiner_switch = args.pop()
-        loras = [[str(args.pop()), float(args.pop())] for _ in range(lora_count)]
-        input_image_checkbox = args.pop()
-        current_tab = args.pop()
-        uov_mode = args.pop()          # 'Disabled' | 'Vary' | 'Upscale'
-        uov_vary_mode = args.pop()     # 'Subtle' | 'Strong'
-        uov_scale = args.pop()         # float, 0.25 ~ 4.0
-        uov_fast = args.pop()          # bool
-        uov_ignore_prompt = args.pop() # bool
-        uov_denoise = args.pop()       # float, 0.0 ~ 1.0
-        uov_input_image = args.pop()
-        outpaint_selections = args.pop()
-        inpaint_input_image = args.pop()
-        inpaint_additional_prompt = args.pop() or ''
+        # 参数顺序的单一事实来源是 modules/arg_schema.py。
+        # 这里按表消费，顺序永远与 UI 一致；长度不符时立刻报错而不是静默错位。
+        expected_args = arg_schema.active_args()
+        if len(args) != len(expected_args):
+            raise RuntimeError(
+                f'[ReFocus] Argument contract mismatch: worker received {len(args)} args, '
+                f'schema expects {len(expected_args)}. '
+                f'Update modules/arg_schema.py together with both ends.'
+            )
+        raw = {name: args.pop() for name in expected_args}
 
-        disable_preview = args.pop()
-        disable_intermediate_results = args.pop()
-        black_out_nsfw = args.pop()
-        adm_scaler_positive = args.pop()
-        adm_scaler_negative = args.pop()
-        adm_scaler_end = args.pop()
-        adaptive_cfg = args.pop()
-        sampler_name = args.pop()
-        scheduler_name = args.pop()
-        overwrite_step = args.pop()
-        overwrite_switch = args.pop()
-        overwrite_width = args.pop()
-        overwrite_height = args.pop()
-        overwrite_vary_strength = args.pop()
-        overwrite_upscale_strength = args.pop()
-        mixing_image_prompt_and_vary_upscale = args.pop()
-        mixing_image_prompt_and_inpaint = args.pop()
-        debugging_cn_preprocessor = args.pop()
-        skipping_cn_preprocessor = args.pop()
-        canny_low_threshold = args.pop()
-        canny_high_threshold = args.pop()
-        refiner_swap_method = args.pop()
-        controlnet_softness = args.pop()
-        freeu_enabled = args.pop()
-        freeu_b1 = args.pop()
-        freeu_b2 = args.pop()
-        freeu_s1 = args.pop()
-        freeu_s2 = args.pop()
-        debugging_inpaint_preprocessor = args.pop()
-        inpaint_disable_initial_latent = args.pop()
-        inpaint_engine = args.pop()
-        inpaint_strength = args.pop()
-        inpaint_respective_field = args.pop()
-        invert_mask_checkbox = args.pop()
-        inpaint_erode_or_dilate = args.pop()
+        prompt = raw['prompt'] or ''
+        negative_prompt = raw['negative_prompt'] or ''
+        translate_prompts = raw['translate_prompts']
+        steps = raw['steps']
+        aspect_ratios_selection = raw['aspect_ratios_selection']
+        image_number = raw['image_number']
+        output_format = raw['output_format']
+        image_seed = raw['image_seed']
+        sharpness = raw['sharpness']
+        guidance_scale = raw['guidance_scale']
+        base_model_name = raw['base_model_name']
+        refiner_model_name = raw['refiner_model_name']
+        refiner_switch = raw['refiner_switch']
+        loras = [[str(raw[f'lora_model_{i + 1}']), float(raw[f'lora_weight_{i + 1}'])] for i in range(lora_count)]
+        input_image_checkbox = raw['input_image_checkbox']
+        current_tab = raw['current_tab']
+        uov_mode = raw['uov_mode']              # 'Disabled' | 'Vary' | 'Upscale'
+        uov_vary_mode = raw['uov_vary_mode']    # 'Subtle' | 'Strong'
+        uov_scale = raw['uov_scale']            # float, 0.25 ~ 4.0
+        uov_fast = raw['uov_fast']              # bool
+        uov_ignore_prompt = raw['uov_ignore_prompt']  # bool
+        uov_denoise = raw['uov_denoise']        # float, 0.0 ~ 1.0
+        uov_input_image = raw['uov_input_image']
+        outpaint_selections = raw['outpaint_selections']
+        inpaint_input_image = raw['inpaint_input_image']
+        inpaint_additional_prompt = raw['inpaint_additional_prompt'] or ''
 
-        save_metadata_to_images = args.pop() if not args_manager.args.disable_metadata else False
-        metadata_scheme = MetadataScheme(args.pop()) if not args_manager.args.disable_metadata else MetadataScheme.FOOOCUS
+        disable_preview = raw['disable_preview']
+        disable_intermediate_results = raw['disable_intermediate_results']
+        black_out_nsfw = raw['black_out_nsfw']
+        adm_scaler_positive = raw['adm_scaler_positive']
+        adm_scaler_negative = raw['adm_scaler_negative']
+        adm_scaler_end = raw['adm_scaler_end']
+        adaptive_cfg = raw['adaptive_cfg']
+        sampler_name = raw['sampler_name']
+        scheduler_name = raw['scheduler_name']
+        overwrite_step = raw['overwrite_step']
+        overwrite_switch = raw['overwrite_switch']
+        overwrite_width = raw['overwrite_width']
+        overwrite_height = raw['overwrite_height']
+        overwrite_vary_strength = raw['overwrite_vary_strength']
+        overwrite_upscale_strength = raw['overwrite_upscale_strength']
+        mixing_image_prompt_and_vary_upscale = raw['mixing_image_prompt_and_vary_upscale']
+        mixing_image_prompt_and_inpaint = raw['mixing_image_prompt_and_inpaint']
+        debugging_cn_preprocessor = raw['debugging_cn_preprocessor']
+        skipping_cn_preprocessor = raw['skipping_cn_preprocessor']
+        canny_low_threshold = raw['canny_low_threshold']
+        canny_high_threshold = raw['canny_high_threshold']
+        refiner_swap_method = raw['refiner_swap_method']
+        controlnet_softness = raw['controlnet_softness']
+        freeu_enabled = raw['freeu_enabled']
+        freeu_b1 = raw['freeu_b1']
+        freeu_b2 = raw['freeu_b2']
+        freeu_s1 = raw['freeu_s1']
+        freeu_s2 = raw['freeu_s2']
+        debugging_inpaint_preprocessor = raw['debugging_inpaint_preprocessor']
+        inpaint_disable_initial_latent = raw['inpaint_disable_initial_latent']
+        inpaint_engine = raw['inpaint_engine']
+        inpaint_strength = raw['inpaint_strength']
+        inpaint_respective_field = raw['inpaint_respective_field']
+        invert_mask_checkbox = raw['invert_mask_checkbox']
+        inpaint_erode_or_dilate = raw['inpaint_erode_or_dilate']
+
+        save_metadata_to_images = raw['save_metadata_to_images'] if not args_manager.args.disable_metadata else False
+        metadata_scheme = MetadataScheme(raw['metadata_scheme']) if not args_manager.args.disable_metadata else MetadataScheme.FOOOCUS
 
         cn_tasks = {x: [] for x in flags.ip_list}
-        for _ in range(flags.controlnet_image_count):
-            cn_img = args.pop()
-            cn_stop = args.pop()
-            cn_weight = args.pop()
-            cn_type = args.pop()
+        for i in range(flags.controlnet_image_count):
+            cn_img = raw[f'cn_image_{i + 1}']
+            cn_stop = raw[f'cn_stop_{i + 1}']
+            cn_weight = raw[f'cn_weight_{i + 1}']
+            cn_type = raw[f'cn_type_{i + 1}']
             if cn_img is not None:
                 cn_tasks[cn_type].append([cn_img, cn_stop, cn_weight])
 
@@ -351,6 +363,13 @@ def worker():
                             inpaint_mask = inpaint_mask.astype(np.uint8)
                     inpaint_mask = (inpaint_mask > 127).astype(np.uint8) * 255
 
+                    # 顺序与 UI 提示一致：先腐蚀/膨胀，再取反
+                    if inpaint_erode_or_dilate != 0:
+                        inpaint_mask = erode_or_dilate(inpaint_mask, inpaint_erode_or_dilate)
+
+                    if invert_mask_checkbox:
+                        inpaint_mask = 255 - inpaint_mask
+
                 inpaint_image = HWC3(inpaint_image)
 
                 if isinstance(inpaint_image, np.ndarray) and isinstance(inpaint_mask, np.ndarray) \
@@ -529,22 +548,16 @@ def worker():
             if overwrite_upscale_strength > 0:
                 denoising_strength = overwrite_upscale_strength
 
-            initial_pixels = core.numpy_to_pytorch(uov_input_image)
             progressbar(async_task, 13, 'VAE encoding ...')
 
-            candidate_vae, _ = pipeline.get_candidate_vae(
+            initial_latent, _, _, width, height = pipeline.prepare_img2img_latent(
+                uov_input_image,
                 steps=steps,
                 switch=switch,
                 denoise=denoising_strength,
-                refiner_swap_method=refiner_swap_method
+                refiner_swap_method=refiner_swap_method,
+                tiled=True
             )
-
-            initial_latent = core.encode_vae(
-                vae=candidate_vae,
-                pixels=initial_pixels, tiled=True)
-            B, C, H, W = initial_latent['samples'].shape
-            width = W * 8
-            height = H * 8
             print(f'Final resolution is {str((height, width))}.')
 
         if 'vary' in goals:
@@ -562,20 +575,15 @@ def worker():
 
             uov_input_image = set_image_shape_ceil(uov_input_image, shape_ceil)
 
-            initial_pixels = core.numpy_to_pytorch(uov_input_image)
             progressbar(async_task, 13, 'VAE encoding ...')
 
-            candidate_vae, _ = pipeline.get_candidate_vae(
+            initial_latent, _, _, width, height = pipeline.prepare_img2img_latent(
+                uov_input_image,
                 steps=steps,
                 switch=switch,
                 denoise=denoising_strength,
                 refiner_swap_method=refiner_swap_method
             )
-
-            initial_latent = core.encode_vae(vae=candidate_vae, pixels=initial_pixels)
-            B, C, H, W = initial_latent['samples'].shape
-            width = W * 8
-            height = H * 8
             print(f'Final resolution is {str((height, width))}.')
 
         if 'inpaint' in goals:
