@@ -621,6 +621,13 @@ with gradio_root:
                                                     outputs=[metadata_json, metadata_import_button],
                                                     queue=False, show_progress=True)
 
+                        # 图片被移除（X）时要一并清空下方显示并禁用 Apply。
+                        # 否则残留的 JSON 会留在界面上，而 Apply 读到的图片已是 None，直接报错。
+                        metadata_input_image.clear(
+                            lambda: ({}, gr.update(interactive=False)),
+                            outputs=[metadata_json, metadata_import_button],
+                            queue=False, show_progress=False)
+
             switch_js = "(x) => {if(x){viewer_to_bottom(100);viewer_to_bottom(500);}else{viewer_to_top();} return x;}"
             down_js = "() => {viewer_to_bottom();}"
 
