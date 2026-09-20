@@ -654,11 +654,17 @@ def worker():
                 )
 
             if not inpaint_disable_initial_latent:
-                # 遮罩必须一起交给采样器：现代核心的逐帧混合在 KSamplerX0Inpaint.__call__
-                # 里靠 denoise_mask 触发，没有它整段混合会被跳过（旧实现是补丁直接从
-                # inpaint_worker.current_task 读遮罩，删除补丁后改由这里传）。
-                # 约定：denoise_mask=1 表示该处重绘，与 latent_mask 的语义一致。
-                initial_latent = {'samples': latent_fill, 'noise_mask': latent_mask}
+                # 这里**不要**加 'noise_mask'。实测加上的后果是：在遮罩外围那个放大的
+                # 矩形裁剪区里出现噪点、原有像素被破坏。
+                #
+                # 原因：本项目的遮罩不是靠采样期的 denoise_mask 实现的，而是靠两件事——
+                #   1) 参数化 inpaint 头（inpaint_worker.patch 把 latent mask 注入 UNet），
+                #      它是在「完整 latent」上训练的，被采样期遮罩后的输入与它预期不符；
+                #   2) 回贴时的 color_correction 按 mask 与原图混合（post_process）。
+                # 再加上采样期遮罩等于同一件事做两遍，且与 inpaint 头互相冲突。
+                # 旧实现里 patched_KSamplerX0Inpaint_forward 的逐帧混合已被删除，
+                # 但它对本项目并非必需——去掉之后遮罩行为反而是正确的。
+                initial_latent = {'samples': latent_fill}
 
             B, C, H, W = latent_fill.shape
             height, width = H * 8, W * 8
