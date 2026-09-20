@@ -27,15 +27,21 @@ def detect_landmarks_with_threshold(helper, threshold):
     """按指定置信度阈值抽 5 点 landmark。
 
     为什么不直接用 helper.get_face_landmarks_5()：facexlib 把那一步的阈值**硬编码成 0.97**
-    （`extras/facexlib/utils/face_restoration_helper.py:139`），而它本来是为「人脸修复」设计的，
-    那里误检代价高。实测这个阈值几乎永远命中不了：
+    （`extras/facexlib/utils/face_restoration_helper.py:139`），那是为人脸修复场景定的值，
+    对动漫风格命中率很低。实测（检测到的张数）：
 
-        | 图                      | 0.97 | 0.8 | 0.5 | 0.3 |
-        | 真实照片 photo2          |  0   |  0  |  1  |  1  |
-        | 动漫生成图（1024x1536）  |  0   |  0  |  0  |  0  |
+实测（faces 检测到的张数）：
+        图                0.97  0.6  0.5  0.3  0.2
+        真人-证件照         1     1    1    1    1
+        真人-全身           1     1    1    2    2
+        动漫-全身 A         0     1    1    1    1
+        动漫-全身 B         0     0    0    0    1
+        动漫-大头 x3        0     0    0    0    0
+    真人照片在默认 0.97 下即可检出；动漫是彩票，且大头照在任何阈值下都检不出。
+    crop_image 取置信度最高的一张，所以调低阈值不会改变已能检出图像的裁剪结果。
 
-    连真实照片都要降到 0.5 才检出。所以这里绕过那个函数、直接调检测器，只替换阈值；
-    landmark 的抽取方式与上游保持一致（含 template_3points 分支）。
+    所以这里绕过那个函数、直接调检测器，只替换阈值；landmark 的抽取方式与上游保持一致
+    （含 template_3points 分支）。
     """
     with torch.no_grad():
         bboxes = helper.face_det.detect_faces(helper.input_img, threshold)

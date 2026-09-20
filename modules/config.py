@@ -366,8 +366,18 @@ default_black_out_nsfw = get_config_item_or_set_default(
     default_value=False,
     validator=lambda x: isinstance(x, bool)
 )
-# FaceSwap 的人脸检测置信度阈值。facexlib 内部硬编码 0.97，实测连真实照片都难以命中
-# （0.5 才检出），动漫风格的脸更低也常常检不出。0.5 是实测能让真实照片工作的值。
+# FaceSwap 的人脸检测置信度阈值。facexlib 内部把这一步硬编码成 0.97：
+# 真实照片在 0.97 下本来就正常，动漫风格则命中率很低，且部分构图（大头照）任何阈值都检不出。
+# 默认 0.5 是为了在不影响真人照片的前提下多覆盖一些动漫图。
+# 实测（faces 检测到的张数）：
+# 图                0.97  0.6  0.5  0.3  0.2
+# 真人-证件照         1     1    1    1    1
+# 真人-全身           1     1    1    2    2
+# 动漫-全身 A         0     1    1    1    1
+# 动漫-全身 B         0     0    0    0    1
+# 动漫-大头 x3        0     0    0    0    0
+# 真人照片在默认 0.97 下即可检出；动漫是彩票，且大头照在任何阈值下都检不出。
+# crop_image 取置信度最高的一张，所以调低阈值不会改变已能检出图像的裁剪结果。
 default_face_detection_threshold = get_config_item_or_set_default(
     key='default_face_detection_threshold',
     default_value=0.5,

@@ -844,10 +844,14 @@ with gradio_root:
                             label='Face Detection Confidence Threshold',
                             minimum=0.1, maximum=0.97, step=0.01,
                             value=modules.config.default_face_detection_threshold,
-                            info='Only used by FaceSwap. facexlib hardcodes 0.97 internally, which almost never '
-                                 'matches, so no face is found and the whole image is used instead. Real photos '
-                                 'start working around 0.5; lower it further for stylised faces. The default '
-                                 'comes from default_face_detection_threshold in config.txt.')
+                            info='Only used by FaceSwap. facexlib hardcodes 0.97 internally. Real photos detect '
+                                 'fine at that value, but stylised or anime faces often do not, and when nothing '
+                                 'is detected the whole image is used instead of a face crop. Lower this to widen '
+                                 'coverage: measured gain is around 0.6 for some full-body anime images and 0.2 for '
+                                 'others, while close-up anime portraits were not detected at any threshold. '
+                                 'The crop always takes the highest-confidence face, so lowering it does not change '
+                                 'the result for images already detected. '
+                                 'The default comes from default_face_detection_threshold in config.txt.')
 
                         mixing_image_prompt_and_vary_upscale = gr.Checkbox(label='Mixing Image Prompt and Vary/Upscale',
                                                                            value=False)
