@@ -654,7 +654,11 @@ def worker():
                 )
 
             if not inpaint_disable_initial_latent:
-                initial_latent = {'samples': latent_fill}
+                # 遮罩必须一起交给采样器：现代核心的逐帧混合在 KSamplerX0Inpaint.__call__
+                # 里靠 denoise_mask 触发，没有它整段混合会被跳过（旧实现是补丁直接从
+                # inpaint_worker.current_task 读遮罩，删除补丁后改由这里传）。
+                # 约定：denoise_mask=1 表示该处重绘，与 latent_mask 的语义一致。
+                initial_latent = {'samples': latent_fill, 'noise_mask': latent_mask}
 
             B, C, H, W = latent_fill.shape
             height, width = H * 8, W * 8

@@ -202,6 +202,9 @@ def attach_model_hooks(model):
     label_emb，报 "mat1 and mat2 shapes cannot be multiplied (2x5632 and 2816x1280)"。
     现在用核心冻结的 model_function_wrapper 挂在同一位置。
     """
+    global _active_model_sampling
+    _active_model_sampling = model.get_model_object("model_sampling")
+
     model.set_model_sampler_cfg_function(custom_sampler_cfg_function)
 
     def unet_wrapper(apply_model, args):
@@ -237,8 +240,17 @@ def attach_model_hooks(model):
 
 _cldm_forward_origin = None
 
+# ControlNet 的 forward 拿不到模型，而 timed_adm 需要 0~999 的离散 timestep
+# （它收到的是 sigma，见 samplers.py 里 get_control(input_x, timestep_, ...)）。
+# 所以在挂 hook 时把 model_sampling 记下来，供这里换算。
+# 局限：base 与 refiner 同时存在时只保留最后一个；两者的调度若不同，
+# assert_model_integrity 已经会告警。
+_active_model_sampling = None
+
 
 def patched_cldm_forward(self, x, hint, timesteps, context, y=None, **kwargs):
+    if _active_model_sampling is not None and y is not None:
+        timesteps = _active_model_sampling.timestep(timesteps)
     y = timed_adm(y, timesteps)
 
     out = _cldm_forward_origin(self, x, hint, timesteps, context, y=y, **kwargs)
