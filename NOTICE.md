@@ -17,11 +17,14 @@
 - **Modifications**: This project modifies and extends the original codebase, including but not limited to: Gradio 6.20 migration, UI overhaul, UOV (Upscale/Vary) refactor, Inpaint mask upload integration, ControlNet fixes, and LCM auto-switching logic.
 - **Copyright Notice**: All original copyright notices of the upstream projects are retained and respected.
 
-### ldm_patched (ComfyUI fork)
+### comfy/ (ComfyUI core)
 
-- **Source**: Derived from [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
+- **Source**: [ComfyUI](https://github.com/comfyanonymous/ComfyUI), v0.33.4
 - **License**: GNU General Public License v3.0
 - **Usage**: Provides the core diffusion model loading, sampling, and VAE infrastructure used by ReFocus.
+- **Note**: Vendored **unmodified** — see `README_DEV.md` for why, and for the two extra pip
+  packages the core requires (`comfy-kitchen`, `comfy-aimdo`). An earlier fork (`ldm_patched/`)
+  was replaced by this copy.
 
 ### Prompt Helper (sd-webui-prompt-all-in-one-app)
 

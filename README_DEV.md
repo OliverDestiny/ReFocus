@@ -18,9 +18,9 @@ ReFocus is a Gradio-based UI for Stable Diffusion XL image generation, rebuilt f
 | :--- | :--- |
 | UI Framework | Gradio 6.20.0 |
 | Web Server | FastAPI + Uvicorn |
-| Diffusion Core | `ldm_patched` (ComfyUI fork) |
-| Model Loading | `ldm_patched.modules.sd` |
-| Sampling | `ldm_patched.modules.samplers` |
+| Diffusion Core | `comfy/` — ComfyUI v0.33.4, vendored unmodified |
+| Model Loading | `comfy.sd` |
+| Sampling | `comfy.samplers` |
 | Image Processing | OpenCV, PIL, NumPy |
 
 ### Directory Layout
@@ -49,13 +49,41 @@ ReFocus/
 │   ├── inpaint_mask.py          # Mask generation using rembg (4 models: isnet-general-use, u2net, u2net_human_seg, isnet-anime)
 │   └── ...
 │
-├── ldm_patched/                 # ComfyUI-based diffusion core (GPL v3)
+├── comfy/                       # ComfyUI core, byte-identical to upstream v0.33.4 (GPL v3)
+├── node_helpers.py              # required by comfy/hooks.py
 │
 ├── prompt_helper/               # Prompt Helper sub-application
 │   ├── app.py                   # FastAPI sub-app
 │   └── static/                  # Frontend assets (Vue app)
 └── ...
 ```
+
+### Vendored core (`comfy/`)
+
+`comfy/` is a **byte-identical, unmodified copy of ComfyUI v0.33.4**. It replaces the older
+`ldm_patched/` fork, which had been renamed and patched and could not be updated.
+
+Two rules follow from that, and both matter:
+
+1. **Do not edit anything under `comfy/`.** ReFocus' own behaviour lives in `modules/`, and the
+   injection layer is confined to `modules/patch.py` — currently three patches:
+   `SDXL.encode_adm`, a thin wrapper around `ControlNet.forward`, and a load-time logger. Every
+   replacement is asserted to have taken effect in `patch_all()`, so an upstream change makes it
+   fail loudly at startup rather than silently stop working.
+2. **There is no commitment to track upstream.** The point of keeping the copy unmodified is that
+   adopting a newer core is a wholesale jump: copy that tag's `comfy/` over this one, re-check
+   `modules/comfy_ops.py` (the functions ported from `comfy_extras/` and `nodes.py`, which are
+   not vendored because they drag in `comfy_api`, `folder_paths` and a large number of unrelated
+   architectures), and re-run the acceptance checks. Keeping a diffable copy is what makes that
+   mechanical instead of a re-derivation.
+
+Two pip packages are required by the core and are pinned exactly in `requirements.txt`:
+`comfy-kitchen` (imported unconditionally by `comfy/ldm/modules/attention.py` and
+`comfy/text_encoders/llama.py`, and used for Anima's RoPE) and `comfy-aimdo` (the dynamic VRAM
+offloader; imported unconditionally by six files, and dormant because `aimdo_enabled` defaults
+to False — it is kept because it is the mechanism that would let larger models fit in limited
+VRAM). Both are versioned independently of ComfyUI and have had breaking changes within the same
+minor line, so do not float them.
 
 ---
 
@@ -244,6 +272,6 @@ GNU General Public License v3.0. See `LICENSE` and `NOTICE.md` for details.
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Fooocus (upstream)](https://github.com/lllyasviel/Fooocus)
 - [DeFooocus (upstream)](https://github.com/ehristoforu/DeFooocus)
-- [ComfyUI (ldm_patched)](https://github.com/comfyanonymous/ComfyUI)
+- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) — the `comfy/` core
 
 ---

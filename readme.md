@@ -32,7 +32,8 @@ ReFocus/
 │
 ├── modules/               # Core backend logic
 ├── extras/                # Extension modules (IP-Adapter, Describe, etc.)
-├── ldm_patched/           # ComfyUI-based diffusion core
+├── comfy/                 # ComfyUI core, byte-identical to upstream
+├── node_helpers.py        # required by comfy/hooks.py
 │
 ├── javascript/            # Custom JavaScript for UI interaction
 ├── css/                   # Custom CSS styles
@@ -107,7 +108,7 @@ This project does not include model files. Users must provide their own SDXL mod
 
 - [Fooocus](https://github.com/lllyasviel/Fooocus) by lllyasviel
 - [DeFooocus](https://github.com/ehristoforu/DeFooocus) by ehristoforu
-- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) (ldm_patched)
+- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) (the `comfy/` core is an unmodified copy)
 - [Prompt Helper](https://github.com/Physton/sd-webui-prompt-all-in-one-app) by Physton
 - Stable Diffusion research and open-source ecosystem
 
