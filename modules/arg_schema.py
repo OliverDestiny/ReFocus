@@ -83,7 +83,7 @@ GROUPS = (
     )),
     ArgGroup('controlnet_debug', (
         'debugging_cn_preprocessor', 'skipping_cn_preprocessor',
-        'canny_low_threshold', 'canny_high_threshold',
+        'canny_low_threshold', 'canny_high_threshold', 'face_detection_threshold',
     )),
     ArgGroup('refiner', ('refiner_swap_method', 'controlnet_softness')),
     ArgGroup('freeu', ('freeu_enabled', 'freeu_b1', 'freeu_b2', 'freeu_s1', 'freeu_s2')),

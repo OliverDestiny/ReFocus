@@ -410,7 +410,37 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
 
     decoded_latent = None
 
-    if refiner_swap_method == 'separate':
+    # 只有在确实存在「另一个」refiner 时分两遍才有意义。未选 refiner、或用的是合成 refiner
+    # （parameterized inpaint 在 refiner 为 None 时会把基座自己当 refiner）时，分段只是把同一个
+    # 模型在 switch 处切开，还会打印一段误导性的日志。这种情况直接一遍跑完。
+    has_distinct_refiner = (refiner_swap_method == 'separate'
+                            and target_refiner_unet is not None
+                            and target_refiner_unet is not target_unet)
+
+    if refiner_swap_method == 'separate' and not has_distinct_refiner:
+        sampled_latent = core.ksampler(
+            model=target_unet,
+            positive=positive_cond,
+            negative=negative_cond,
+            latent=initial_latent,
+            steps=steps, start_step=0, last_step=steps, disable_noise=False, force_full_denoise=True,
+            seed=image_seed,
+            denoise=denoise,
+            callback_function=callback,
+            cfg=cfg_scale,
+            sampler_name=sampler_name,
+            scheduler=scheduler_name,
+            previewer_start=0,
+            previewer_end=steps,
+            disable_preview=disable_preview
+        )
+
+        target_model = target_refiner_vae
+        if target_model is None:
+            target_model = target_vae
+        decoded_latent = core.decode_vae(vae=target_model, latent_image=sampled_latent, tiled=tiled)
+
+    if has_distinct_refiner:
         sampled_latent = core.ksampler(
             model=target_unet,
             positive=positive_cond,
@@ -430,9 +460,6 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
         print('Refiner swapped by changing ksampler. Noise preserved.')
 
         target_model = target_refiner_unet
-        if target_model is None:
-            target_model = target_unet
-            print('Use base model to refine itself - this may because of developer mode.')
 
         sampled_latent = core.ksampler(
             model=target_model,

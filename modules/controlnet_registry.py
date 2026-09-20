@@ -30,6 +30,7 @@ class PreprocessContext:
     canny_low_threshold: float
     canny_high_threshold: float
     model_path: Optional[str] = None
+    face_detection_threshold: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -143,7 +144,7 @@ def _preprocess_ip_face(image, ctx: PreprocessContext):
 
     img = HWC3(image)
     if not ctx.skipping_preprocessor:
-        img = extras.face_crop.crop_image(img)
+        img = extras.face_crop.crop_image(img, threshold=ctx.face_detection_threshold)
     img = resize_image(img, width=_IP_IMAGE_SIZE, height=_IP_IMAGE_SIZE, resize_mode=0)
     return ip_adapter.preprocess(img, ip_adapter_path=ctx.model_path), img
 

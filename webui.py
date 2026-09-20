@@ -730,8 +730,10 @@ with gradio_root:
                     refiner_switch = gr.Slider(label='Refiner Switch At', minimum=0.1, maximum=1.0, step=0.0001,
                                                info='Use 0.4 for SD1.5 realistic models; '
                                                     'or 0.667 for SD1.5 anime models; '
-                                                    'or 0.8 for XL-refiners; '
-                                                    'or any value for switching two SDXL models.',
+                                                    'or 0.8 for XL-refiners. '
+                                                    'Two SDXL models can be switched at any value, but they must '
+                                                    'share the same prediction type (both EPS, or both v_prediction) '
+                                                    '— mixing them keeps the base sigma schedule and produces a noise image.',
                                                value=modules.config.default_refiner_switch,
                                                visible=modules.config.default_refiner_model_name != 'None')
 
@@ -837,6 +839,15 @@ with gradio_root:
                                                                 info='See the results from preprocessors.')
                         skipping_cn_preprocessor = gr.Checkbox(label='Skip Preprocessors', value=False,
                                                                info='Do not preprocess images. (Inputs are already canny/depth/cropped-face/etc.)')
+
+                        face_detection_threshold = gr.Slider(
+                            label='Face Detection Confidence Threshold',
+                            minimum=0.1, maximum=0.97, step=0.01,
+                            value=modules.config.default_face_detection_threshold,
+                            info='Only used by FaceSwap. facexlib hardcodes 0.97 internally, which almost never '
+                                 'matches, so no face is found and the whole image is used instead. Real photos '
+                                 'start working around 0.5; lower it further for stylised faces. The default '
+                                 'comes from default_face_detection_threshold in config.txt.')
 
                         mixing_image_prompt_and_vary_upscale = gr.Checkbox(label='Mixing Image Prompt and Vary/Upscale',
                                                                            value=False)
@@ -1025,7 +1036,7 @@ with gradio_root:
         add_ctrl_group(ctrls, 'sampler', [sampler_name, scheduler_name])
         add_ctrl_group(ctrls, 'overwrite', [overwrite_step, overwrite_switch, overwrite_width, overwrite_height, overwrite_vary_strength])
         add_ctrl_group(ctrls, 'mixing', [overwrite_upscale_strength, mixing_image_prompt_and_vary_upscale, mixing_image_prompt_and_inpaint])
-        add_ctrl_group(ctrls, 'controlnet_debug', [debugging_cn_preprocessor, skipping_cn_preprocessor, canny_low_threshold, canny_high_threshold])
+        add_ctrl_group(ctrls, 'controlnet_debug', [debugging_cn_preprocessor, skipping_cn_preprocessor, canny_low_threshold, canny_high_threshold, face_detection_threshold])
         add_ctrl_group(ctrls, 'refiner', [refiner_swap_method, controlnet_softness])
         add_ctrl_group(ctrls, 'freeu', freeu_ctrls)
         add_ctrl_group(ctrls, 'inpaint', inpaint_ctrls)

@@ -148,6 +148,7 @@ def worker():
         skipping_cn_preprocessor = raw['skipping_cn_preprocessor']
         canny_low_threshold = raw['canny_low_threshold']
         canny_high_threshold = raw['canny_high_threshold']
+        face_detection_threshold = raw['face_detection_threshold']
         refiner_swap_method = raw['refiner_swap_method']
         controlnet_softness = raw['controlnet_softness']
         freeu_enabled = raw['freeu_enabled']
@@ -684,6 +685,7 @@ def worker():
                     canny_low_threshold=canny_low_threshold,
                     canny_high_threshold=canny_high_threshold,
                     model_path=cn_model_paths.get(cn_type.name),
+                    face_detection_threshold=face_detection_threshold,
                 )
 
                 for slot in cn_tasks[cn_type.name]:

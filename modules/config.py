@@ -366,6 +366,13 @@ default_black_out_nsfw = get_config_item_or_set_default(
     default_value=False,
     validator=lambda x: isinstance(x, bool)
 )
+# FaceSwap 的人脸检测置信度阈值。facexlib 内部硬编码 0.97，实测连真实照片都难以命中
+# （0.5 才检出），动漫风格的脸更低也常常检不出。0.5 是实测能让真实照片工作的值。
+default_face_detection_threshold = get_config_item_or_set_default(
+    key='default_face_detection_threshold',
+    default_value=0.5,
+    validator=lambda x: isinstance(x, float) and 0.0 < x <= 1.0
+)
 default_rembg_model = get_config_item_or_set_default(
     key='default_rembg_model',
     default_value='u2net',  # 保持与 rembg 库原生的默认行为一致
