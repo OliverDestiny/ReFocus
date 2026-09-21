@@ -120,7 +120,11 @@ def generate_clicked(task):
         time.sleep(0.01)
 
         # ---- defending detection: worker stopped but no waiting events ----
-        if hasattr(task, 'processing') and not task.processing and len(task.yields) == 0:
+        # 还要确认这个任务已经不在队列里：刚提交时 processing 仍是 False，而 worker 可能正在
+        # 收尾上一个任务（handler 之后还要 prepare_text_encoder，SDXL 上大约 1 秒），
+        # 这时直接判定「worker 已停」会把刚提交的任务丢掉——不报错，只是这次生成毫无反应。
+        if (hasattr(task, 'processing') and not task.processing and len(task.yields) == 0
+                and task not in worker.async_tasks):
             # let finish event first reach window (avoid competing conditions)
             time.sleep(0.05)
             if len(task.yields) == 0:  # Check twice
