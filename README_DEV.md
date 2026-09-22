@@ -10,7 +10,78 @@ ReFocus is a Gradio-based UI for Stable Diffusion XL image generation, rebuilt f
 
 ---
 
+## Two product lines and the version policy
+
+The repository carries two independent lines, and knowing which one a change belongs to is the first
+question to ask about any work:
+
+- **`main` — the SDXL toolbox, no Anima.** Its philosophy is simple plus powerful: the defaults should
+  produce good images without opening Advanced, Advanced should give an advanced user full control, and
+  there is **no commitment to tracking new models**. Anyone who needs the newest architecture should
+  use ComfyUI; even much larger projects cannot stay current, so this one does not try.
+- **`feature/d5-anima` — the base plus Anima.** Two purposes: probe how a new model family fits the
+  base, and freeze a personal ComfyUI workflow behind a cleaner, cross-device-usable UI. The practical
+  argument is that node graphs are unusable on mobile, SDXL's useful life is long, and UNet models are
+  still state of the art for specific content such as art style.
+
+Consequences:
+
+- Anything unrelated to Anima (FreeU, the resolution control, ControlNet, Debug Tools) is written on
+  **main** and tagged there. The Anima branch takes it in by merging main, so the two trees stay close.
+- `v x.y.z` on main: **x** for a core-level change (the DeFooocus-to-ReFocus rewrite, the move to the
+  vendored ComfyUI core), **y** for a feature (FreeU promoted, ControlNet foundation), **z** for a
+  bug-fix-only release. `v2.0.0` is the core migration, `v2.0.1` a fix, `v2.1.0` the first feature batch.
+- The Anima branch has its own axis, prefixed so `git tag` output is unambiguous: `anima-v1.0.0` is the
+  milestone where Anima support lands on the base, then `anima-v1.x` and `anima-v1.x.y` follow the same
+  feature/fix meaning.
+- Only milestones are tagged. Intermediate commits — including feature branches that are not yet
+  verified — carry no tag.
+- Acceptance work stays out of the repository: the control experiments live in `.zcode/probes/` and are
+  local only. A milestone is tagged after they pass, not before.
+
+---
+
+---
+
 ## Architecture
+
+### ControlNet types declare their own parameters
+
+`modules/controlnet_registry.py` is the single place a ControlNet type is declared: its model loader,
+its preprocessor, how it is applied (`'conditioning'` through `core.apply_controlnet`, or
+`'unet_patch'` through `ip_adapter.patch_model`), and now also two things that used to be hardcoded:
+
+- `conditioning_source` is `'image'` when the slot supplies a reference image, or `'params'` when the
+  type describes its condition with numbers instead of an image (a camera-angle ControlNet would be
+  the first of those).
+- `param_spec` lists the type's own parameters as `ParamSpec` declarations. The UI builds widgets from
+  `param_union()` and shows only the ones the selected type declares; the worker fills missing keys
+  from the spec defaults.
+
+Each slot's values travel to the worker as one JSON argument, `cn_params_{i}`, so **adding a type never
+changes the parameter count**: declare it in the registry and it is done. A collect step in the
+Generate (and Polish) chain fills the per-slot states before `get_task` runs. Unreadable JSON is a hard
+error rather than a silent fallback to defaults, because a fallback would make a threshold quietly do
+nothing.
+
+Both preprocessors and their parameters moved here from the old global Debug Tools sliders: the Canny
+thresholds belong to PyraCanny and the face detection confidence to FaceSwap, and they are now per slot
+rather than per run.
+
+### Where the shared UI parameters live
+
+- The output size is two sliders (width and height, each with a number box), a preset dropdown that
+  applies one of `config.available_aspect_ratios`, and a Swap button. `aspect_ratios_selection` used to
+  be a single radio list, and the two `overwrite_width` / `overwrite_height` sliders in Debug Tools
+  existed only because there was no way to type a size. Step is 8 because the shipped presets include
+  values like 720 and 1080 that divide by 8 but not by 64.
+- FreeU sits in the visible part of the Advanced tab. It was already a normal parameter pair in the
+  argument schema; only the UI location was debug-only. It applies to the base model only.
+- The Debug Tools tab is now down to the parameters that have no normal counterpart: the ADM scalers,
+  adaptive CFG, the refiner swap method and the output flags. Six `overwrite_*` controls were deleted,
+  because Steps is already an exact integer slider, Refiner Switch At expresses the same switch as a
+  fraction, the Vary and Upscale tabs have their own Denoise Strength, and the width/height overwrites
+  are covered by the new resolution control.
 
 ### Stack
 

@@ -69,7 +69,25 @@ Upload an image, then you can:
   - Enable "Fast Mode" to upscale without diffusion sampling (faster, fewer details)
   - Check "Ignore Prompt" to use an empty prompt, letting the model explore freely — great for creative inspiration
 
-### Image Prompt
+### Image Prompt
+
+Each slot takes a reference image and a type. Type-specific settings (for example the Canny
+thresholds, or the face detection confidence for FaceSwap) appear under **Advanced** in that tab,
+per slot.
+
+Upload reference images to influence the generation. Four control types are available:
+
+- **ImagePrompt**: Extracts style or content from the reference
+- **PyraCanny**: Uses edges to lock composition — good for preserving pose or layout
+- **CPDS**: Preserves spatial structure and depth
+- **FaceSwap**: Maintains facial consistency
+
+Each reference image can be adjusted independently:
+
+- **Stop At**: Controls when the control network stops influencing the sampling process (higher = longer influence)
+- **Weight**: Controls the strength of the control network's influence
+
+### Inpaint
 
 Upload reference images to influence the generation. Four control types are available:
 
@@ -123,7 +141,7 @@ Check the **Advanced** checkbox on the main interface to expand the settings pan
 ### Basic Parameters
 
 - **Steps**: Higher values generally produce better details. 1–10 steps automatically switch to LCM ultra-fast mode.
-- **Aspect Ratio**: A list of preset aspect ratios.
+- **Width / Height**: Set the output size directly. Each slider has a number box next to it, **Preset** applies one of the saved aspect ratios to both, and **Swap** exchanges them. Sizes snap to multiples of 8; SDXL is trained around one megapixel, so far larger sizes tend to cost time without adding detail.
 - **Image Number**: Number of images to generate per batch.
 - **Negative Prompt**: Describe what you do not want to appear in the image.
 - **Seed**: Fixed seeds reproduce the same result; random seeds produce different results each time.
@@ -134,6 +152,11 @@ Check the **Advanced** checkbox on the main interface to expand the settings pan
 - Refiner Switch: Controls at which step to switch to the refiner.
 - Up to 5 LoRAs can be loaded simultaneously, each with individually adjustable weights.
 
+### FreeU
+
+FreeU rescales the UNet's skip features and can add background detail; it works on the base model
+only. It is off by default — turn it on and compare, since the effect depends on the model.
+
 ### Advanced Debug Tools
 
 > ⚠️ **Warning**
@@ -145,8 +168,8 @@ Check the **Advanced** checkbox on the main interface to expand the settings pan
 - **Output Format**: Select the file format for saving images (png, jpg, webp).
 - **Sampler / Scheduler**: Manually select the sampling algorithm. Keep the defaults unless you understand the differences.
 - **ControlNet Softness**: Adjusts how "soft" the ControlNet's influence is. The default works for most cases.
-- **Canny Threshold**: Adjusts edge detection sensitivity. Only needed if edge control is not accurate.
-- **FreeU**: Experimental optimization that can improve background details. Effectiveness varies by model.
+- **Canny Threshold** and **Face Detection Confidence**: these now live with the ControlNet type that
+  uses them — open the Image Prompt tab, pick the type, and tick **Advanced** in that tab.
 
 > If your goal is simply to create a good-looking image, **do not touch the parameters above**. They exist to solve specific technical issues, not for everyday use.
 
