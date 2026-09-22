@@ -674,9 +674,38 @@ with gradio_root:
                     preset_25.click(lambda: gr.update(value=25), outputs=steps_slider)
                     preset_10.click(lambda: gr.update(value=10), outputs=steps_slider)
 
-                aspect_ratios_selection = gr.Radio(label='Aspect Ratios', choices=modules.config.available_aspect_ratios,
-                                                   value=modules.config.default_aspect_ratio, info='width × height',
-                                                   elem_classes='aspect_ratios')
+                # 分辨率：与步数同一种形态——拉条自带数字输入框，旁边给预设（这里用下拉选完即应用）
+                # 与交换横竖。预设表仍来自 config.available_aspect_ratios。
+                _default_w, _default_h = (int(v) for v in modules.config.default_aspect_ratio
+                                          .replace('×', ' ').split(' ')[:2])
+                with gr.Row():
+                    resolution_width = gr.Slider(label='Width', minimum=512, maximum=2048, step=8,
+                                                 value=_default_w, elem_id='resolution_width',
+                                                 info='Snapped to 8; SDXL is trained around 1 megapixel.')
+                    resolution_height = gr.Slider(label='Height', minimum=512, maximum=2048, step=8,
+                                                  value=_default_h, elem_id='resolution_height',
+                                                  info='Swap keeps the size, presets keep the area.')
+                with gr.Row():
+                    resolution_preset = gr.Dropdown(label='Preset', choices=modules.config.available_aspect_ratios,
+                                                    value=None, interactive=True, container=False,
+                                                    info='Applies to the two sliders above.')
+                    resolution_swap = gr.Button('\u21c4 Swap', size='sm')
+
+                def resolution_preset_change(preset):
+                    if not preset:
+                        return gr.update(), gr.update()
+                    w, h = (int(v) for v in preset.replace('×', ' ').split(' ')[:2])
+                    return gr.update(value=w), gr.update(value=h)
+
+                def resolution_swap_change(w, h):
+                    return gr.update(value=h), gr.update(value=w)
+
+                resolution_preset.change(resolution_preset_change, inputs=resolution_preset,
+                                         outputs=[resolution_width, resolution_height],
+                                         queue=False, show_progress=False)
+                resolution_swap.click(resolution_swap_change, inputs=[resolution_width, resolution_height],
+                                      outputs=[resolution_width, resolution_height],
+                                      queue=False, show_progress=False)
 
                 with gr.Column():
                     sampling_apply = gr.Checkbox(label="Sampling", value=False)
@@ -923,7 +952,7 @@ with gradio_root:
         state_is_generating = gr.State(False)
 
         load_data_outputs = [advanced_checkbox, image_number, prompt, negative_prompt, 
-                             steps_slider, aspect_ratios_selection,
+                             steps_slider, resolution_width, resolution_height,
                              guidance_scale, sharpness, adm_scaler_positive,
                              adm_scaler_negative, adm_scaler_end, refiner_swap_method, adaptive_cfg, base_model,
                              refiner_model, refiner_switch, sampler_name, scheduler_name, seed_random, image_seed,
@@ -1016,7 +1045,8 @@ with gradio_root:
 
         add_ctrl_group(ctrls, 'generation', [
             prompt, negative_prompt, translate_prompts,
-            steps_slider, aspect_ratios_selection, image_number, output_format, image_seed, sharpness, guidance_scale
+            steps_slider, resolution_width, resolution_height,
+            image_number, output_format, image_seed, sharpness, guidance_scale
         ])
         add_ctrl_group(ctrls, 'models', [base_model, refiner_model, refiner_switch] + lora_ctrls)
         add_ctrl_group(ctrls, 'input_image_mode', [input_image_checkbox, current_tab])

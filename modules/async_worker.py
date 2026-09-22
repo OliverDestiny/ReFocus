@@ -104,7 +104,8 @@ def worker():
         negative_prompt = raw['negative_prompt'] or ''
         translate_prompts = raw['translate_prompts']
         steps = raw['steps']
-        aspect_ratios_selection = raw['aspect_ratios_selection']
+        width = int(raw['width'])
+        height = int(raw['height'])
         image_number = raw['image_number']
         output_format = raw['output_format']
         image_seed = raw['image_seed']
@@ -226,9 +227,6 @@ def worker():
         initial_latent = None
         denoising_strength = 1.0
         tiled = False
-
-        width, height = aspect_ratios_selection.replace('×', ' ').split(' ')[:2]
-        width, height = int(width), int(height)
 
         skip_prompt_processing = False
 

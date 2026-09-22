@@ -52,7 +52,7 @@ def _metadata_enabled() -> bool:
 GROUPS = (
     ArgGroup('generation', (
         'prompt', 'negative_prompt', 'translate_prompts', 'steps',
-        'aspect_ratios_selection', 'image_number', 'output_format', 'image_seed',
+        'width', 'height', 'image_number', 'output_format', 'image_seed',
         'sharpness', 'guidance_scale',
     )),
     ArgGroup('models', (

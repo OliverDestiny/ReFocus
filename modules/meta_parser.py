@@ -33,29 +33,30 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
     # [2] prompt
     # [3] negative_prompt
     # [4] steps_slider
-    # [5] aspect_ratios_selection
-    # [6] guidance_scale
-    # [7] sharpness
-    # [8] adm_scaler_positive
-    # [9] adm_scaler_negative
-    # [10] adm_scaler_end
-    # [11] refiner_swap_method
-    # [12] adaptive_cfg
-    # [13] base_model
-    # [14] refiner_model
-    # [15] refiner_switch
-    # [16] sampler_name
-    # [17] scheduler_name
-    # [18] seed_random
-    # [19] image_seed
-    # [20] generate_button
-    # [21] load_parameter_button
-    # [22] freeu_enabled
-    # [23] freeu_b1
-    # [24] freeu_b2
-    # [25] freeu_s1
-    # [26] freeu_s2
-    # [27..] lora_combined (pairs)
+    # [5] resolution_width
+    # [6] resolution_height
+    # [7] guidance_scale
+    # [8] sharpness
+    # [9] adm_scaler_positive
+    # [10] adm_scaler_negative
+    # [11] adm_scaler_end
+    # [12] refiner_swap_method
+    # [13] adaptive_cfg
+    # [14] base_model
+    # [15] refiner_model
+    # [16] refiner_switch
+    # [17] sampler_name
+    # [18] scheduler_name
+    # [19] seed_random
+    # [20] image_seed
+    # [21] generate_button
+    # [22] load_parameter_button
+    # [23] freeu_enabled
+    # [24] freeu_b1
+    # [25] freeu_b2
+    # [26] freeu_s1
+    # [27] freeu_s2
+    # [28..] lora_combined (pairs)
 
     results = []
 
@@ -93,19 +94,19 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
     except:
         results.append(gr.update())
 
-    # 6. resolution -> aspect_ratios_selection
+    # 6-7. resolution -> resolution_width / resolution_height
+    # 值可能是 int（fooocus 方案写成 "(1024, 1536)"）或字符串（a1111 的 "1024x1536" 与预设），统一转 int。
     res = get_value('resolution', 'Resolution', None)
     if res is not None:
         try:
             width, height = eval(res)
-            formatted = modules.config.add_ratio(f'{width}*{height}')
-            if formatted in modules.config.available_aspect_ratios:
-                results.append(formatted)
-            else:
-                results.append(gr.update())
+            results.append(int(width))
+            results.append(int(height))
         except:
             results.append(gr.update())
+            results.append(gr.update())
     else:
+        results.append(gr.update())
         results.append(gr.update())
 
     # 11. guidance_scale (float)
@@ -260,25 +261,6 @@ def get_float(key: str, fallback: str | None, source_dict: dict, results: list, 
         h = float(h)
         results.append(h)
     except:
-        results.append(gr.update())
-
-
-def get_resolution(key: str, fallback: str | None, source_dict: dict, results: list, default=None):
-    try:
-        h = source_dict.get(key, source_dict.get(fallback, default))
-        width, height = eval(h)
-        formatted = modules.config.add_ratio(f'{width}*{height}')
-        if formatted in modules.config.available_aspect_ratios:
-            results.append(formatted)
-            results.append(-1)
-            results.append(-1)
-        else:
-            results.append(gr.update())
-            results.append(width)
-            results.append(height)
-    except:
-        results.append(gr.update())
-        results.append(gr.update())
         results.append(gr.update())
 
 
