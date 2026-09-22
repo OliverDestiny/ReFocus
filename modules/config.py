@@ -321,21 +321,6 @@ default_cfg_tsnr = get_config_item_or_set_default(
     default_value=7.0,
     validator=lambda x: isinstance(x, numbers.Number)
 )
-default_overwrite_step = get_config_item_or_set_default(
-    key='default_overwrite_step',
-    default_value=-1,
-    validator=lambda x: isinstance(x, int)
-)
-default_overwrite_switch = get_config_item_or_set_default(
-    key='default_overwrite_switch',
-    default_value=-1,
-    validator=lambda x: isinstance(x, int)
-)
-default_overwrite_upscale = get_config_item_or_set_default(
-    key='default_overwrite_upscale',
-    default_value=-1,
-    validator=lambda x: isinstance(x, numbers.Number)
-)
 example_inpaint_prompts = get_config_item_or_set_default(
     key='example_inpaint_prompts',
     default_value=[
@@ -408,7 +393,6 @@ possible_preset_keys = {
     "default_sample_sharpness": "sharpness",
     "default_sampler": "sampler",
     "default_scheduler": "scheduler",
-    "default_overwrite_step": "steps",
     "default_steps": "steps",
     "default_prompt": "prompt",
     "default_prompt_negative": "negative_prompt",

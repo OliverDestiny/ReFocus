@@ -33,33 +33,29 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
     # [2] prompt
     # [3] negative_prompt
     # [4] steps_slider
-    # [5] overwrite_step
-    # [6] overwrite_switch
-    # [7] aspect_ratios_selection
-    # [8] overwrite_width
-    # [9] overwrite_height
-    # [10] guidance_scale
-    # [11] sharpness
-    # [12] adm_scaler_positive
-    # [13] adm_scaler_negative
-    # [14] adm_scaler_end
-    # [15] refiner_swap_method
-    # [16] adaptive_cfg
-    # [17] base_model
-    # [18] refiner_model
-    # [19] refiner_switch
-    # [20] sampler_name
-    # [21] scheduler_name
-    # [22] seed_random
-    # [23] image_seed
-    # [24] generate_button
-    # [25] load_parameter_button
-    # [26] freeu_enabled
-    # [27] freeu_b1
-    # [28] freeu_b2
-    # [29] freeu_s1
-    # [30] freeu_s2
-    # [31..] lora_combined (pairs)
+    # [5] aspect_ratios_selection
+    # [6] guidance_scale
+    # [7] sharpness
+    # [8] adm_scaler_positive
+    # [9] adm_scaler_negative
+    # [10] adm_scaler_end
+    # [11] refiner_swap_method
+    # [12] adaptive_cfg
+    # [13] base_model
+    # [14] refiner_model
+    # [15] refiner_switch
+    # [16] sampler_name
+    # [17] scheduler_name
+    # [18] seed_random
+    # [19] image_seed
+    # [20] generate_button
+    # [21] load_parameter_button
+    # [22] freeu_enabled
+    # [23] freeu_b1
+    # [24] freeu_b2
+    # [25] freeu_s1
+    # [26] freeu_s2
+    # [27..] lora_combined (pairs)
 
     results = []
 
@@ -97,21 +93,7 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
     except:
         results.append(gr.update())
 
-    # 6. overwrite_step (int)  默认 -1
-    overwrite_step = get_value('overwrite_step', 'Overwrite Step', -1)
-    try:
-        results.append(int(overwrite_step))
-    except:
-        results.append(gr.update())
-
-    # 7. overwrite_switch (float)
-    overwrite_switch = get_value('overwrite_switch', 'Overwrite Switch', -1.0)
-    try:
-        results.append(float(overwrite_switch))
-    except:
-        results.append(gr.update())
-
-    # 8-10. resolution -> aspect_ratios_selection, overwrite_width, overwrite_height
+    # 6. resolution -> aspect_ratios_selection
     res = get_value('resolution', 'Resolution', None)
     if res is not None:
         try:
@@ -119,19 +101,11 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
             formatted = modules.config.add_ratio(f'{width}*{height}')
             if formatted in modules.config.available_aspect_ratios:
                 results.append(formatted)
-                results.append(-1)
-                results.append(-1)
             else:
                 results.append(gr.update())
-                results.append(width)
-                results.append(height)
         except:
             results.append(gr.update())
-            results.append(gr.update())
-            results.append(gr.update())
     else:
-        results.append(gr.update())
-        results.append(gr.update())
         results.append(gr.update())
 
     # 11. guidance_scale (float)
@@ -468,7 +442,6 @@ class A1111MetadataParser(MetadataParser):
         'adm_guidance': 'ADM Guidance',
         'refiner_swap_method': 'Refiner Swap Method',
         'adaptive_cfg': 'Adaptive CFG',
-        'overwrite_switch': 'Overwrite Switch',
         'freeu': 'FreeU',
         'base_model': 'Model',
         'base_model_hash': 'Model hash',
@@ -592,7 +565,7 @@ class A1111MetadataParser(MetadataParser):
                 self.fooocus_to_a1111['refiner_model_hash']: self.refiner_model_hash
             }
 
-        for key in ['adaptive_cfg', 'overwrite_switch', 'refiner_swap_method', 'freeu']:
+        for key in ['adaptive_cfg', 'refiner_swap_method', 'freeu']:
             if key in data:
                 generation_params[self.fooocus_to_a1111[key]] = data[key]
 

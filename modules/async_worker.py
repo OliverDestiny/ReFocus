@@ -136,12 +136,6 @@ def worker():
         adaptive_cfg = raw['adaptive_cfg']
         sampler_name = raw['sampler_name']
         scheduler_name = raw['scheduler_name']
-        overwrite_step = raw['overwrite_step']
-        overwrite_switch = raw['overwrite_switch']
-        overwrite_width = raw['overwrite_width']
-        overwrite_height = raw['overwrite_height']
-        overwrite_vary_strength = raw['overwrite_vary_strength']
-        overwrite_upscale_strength = raw['overwrite_upscale_strength']
         mixing_image_prompt_and_vary_upscale = raw['mixing_image_prompt_and_vary_upscale']
         mixing_image_prompt_and_inpaint = raw['mixing_image_prompt_and_inpaint']
         debugging_cn_preprocessor = raw['debugging_cn_preprocessor']
@@ -184,10 +178,6 @@ def worker():
         if base_model_name == refiner_model_name:
             print(f'Refiner disabled because base model and refiner are same.')
             refiner_model_name = 'None'
-
-        if overwrite_step > 0:
-            steps = overwrite_step
-            print(f'[Parameters] Forced overwrite step to {steps}')
 
         if steps <= 10:
             print('Auto-switching to LCM mode (1-10 steps).')
@@ -240,18 +230,9 @@ def worker():
         width, height = aspect_ratios_selection.replace('×', ' ').split(' ')[:2]
         width, height = int(width), int(height)
 
-        if overwrite_width > 0:
-            width = overwrite_width
-            print(f'[Parameters] Forced overwrite width to {width}')
-        if overwrite_height > 0:
-            height = overwrite_height
-            print(f'[Parameters] Forced overwrite height to {height}')
-
         skip_prompt_processing = False
 
         switch = int(round(steps * refiner_switch))
-        if overwrite_switch > 0:
-            switch = overwrite_switch
 
         inpaint_worker.current_task = None
         inpaint_parameterized = inpaint_engine != 'None'
@@ -275,8 +256,6 @@ def worker():
 
             # --- get switch ---
             switch = int(round(steps * refiner_switch))
-            if overwrite_switch > 0:
-                switch = overwrite_switch
 
             if (current_tab == 'uov' or (
                     current_tab == 'ip' and mixing_image_prompt_and_vary_upscale)) \
@@ -530,8 +509,6 @@ def worker():
 
             tiled = not uov_fast
             denoising_strength = uov_denoise
-            if overwrite_upscale_strength > 0:
-                denoising_strength = overwrite_upscale_strength
 
             progressbar(async_task, 13, 'VAE encoding ...')
 
@@ -547,8 +524,6 @@ def worker():
 
         if 'vary' in goals:
             denoising_strength = uov_denoise
-            if overwrite_vary_strength > 0:
-                denoising_strength = overwrite_vary_strength
 
             shape_ceil = get_image_shape_ceil(uov_input_image)
             if shape_ceil < 1024:
@@ -811,8 +786,6 @@ def worker():
                          ('Refiner Switch', 'refiner_switch', refiner_switch)]
 
                     if refiner_model_name != 'None':
-                        if overwrite_switch > 0:
-                            d.append(('Overwrite Switch', 'overwrite_switch', overwrite_switch))
                         if refiner_swap_method != flags.refiner_swap_method:
                             d.append(('Refiner Swap Method', 'refiner_swap_method', refiner_swap_method))
                     if modules.patch.patch_settings[pid].adaptive_cfg != modules.config.default_cfg_tsnr:

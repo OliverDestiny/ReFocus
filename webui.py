@@ -796,30 +796,6 @@ with gradio_root:
                                                  info='Enabling Fooocus\'s implementation of CFG mimicking for TSNR '
                                                       '(effective when real CFG > mimicked CFG).')
 
-                        overwrite_step = gr.Slider(label='Forced Overwrite of Sampling Step',
-                                                   minimum=-1, maximum=200, step=1,
-                                                   value=modules.config.default_overwrite_step,
-                                                   info='Set as -1 to disable. For developer debugging.')
-                        overwrite_switch = gr.Slider(label='Forced Overwrite of Refiner Switch Step',
-                                                     minimum=-1, maximum=200, step=1,
-                                                     value=modules.config.default_overwrite_switch,
-                                                     info='Set as -1 to disable. For developer debugging.')
-                        overwrite_width = gr.Slider(label='Forced Overwrite of Generating Width',
-                                                    minimum=-1, maximum=2048, step=1, value=-1,
-                                                    info='Set as -1 to disable. For developer debugging. '
-                                                         'Results will be worse for non-standard numbers that SDXL is not trained on.')
-                        overwrite_height = gr.Slider(label='Forced Overwrite of Generating Height',
-                                                     minimum=-1, maximum=2048, step=1, value=-1,
-                                                     info='Set as -1 to disable. For developer debugging. '
-                                                          'Results will be worse for non-standard numbers that SDXL is not trained on.')
-                        overwrite_vary_strength = gr.Slider(label='Forced Overwrite of Denoising Strength of "Vary"',
-                                                            minimum=-1, maximum=1.0, step=0.001, value=-1,
-                                                            info='Set as negative number to disable. For developer debugging.')
-                        overwrite_upscale_strength = gr.Slider(label='Forced Overwrite of Denoising Strength of "Upscale"',
-                                                               minimum=-1, maximum=1.0, step=0.001,
-                                                               value=modules.config.default_overwrite_upscale,
-                                                               info='Set as negative number to disable. For developer debugging.')
-
                         disable_preview = gr.Checkbox(label='Disable Preview', value=modules.config.default_black_out_nsfw,
                                                       interactive=not modules.config.default_black_out_nsfw,
                                                       info='Disable preview during generation.')
@@ -947,8 +923,8 @@ with gradio_root:
         state_is_generating = gr.State(False)
 
         load_data_outputs = [advanced_checkbox, image_number, prompt, negative_prompt, 
-                             steps_slider, overwrite_step, overwrite_switch, aspect_ratios_selection,
-                             overwrite_width, overwrite_height, guidance_scale, sharpness, adm_scaler_positive,
+                             steps_slider, aspect_ratios_selection,
+                             guidance_scale, sharpness, adm_scaler_positive,
                              adm_scaler_negative, adm_scaler_end, refiner_swap_method, adaptive_cfg, base_model,
                              refiner_model, refiner_switch, sampler_name, scheduler_name, seed_random, image_seed,
                              generate_button, load_parameter_button] + freeu_ctrls + lora_ctrls
@@ -1049,8 +1025,7 @@ with gradio_root:
         add_ctrl_group(ctrls, 'output_flags', [disable_preview, disable_intermediate_results, black_out_nsfw])
         add_ctrl_group(ctrls, 'adm', [adm_scaler_positive, adm_scaler_negative, adm_scaler_end, adaptive_cfg])
         add_ctrl_group(ctrls, 'sampler', [sampler_name, scheduler_name])
-        add_ctrl_group(ctrls, 'overwrite', [overwrite_step, overwrite_switch, overwrite_width, overwrite_height, overwrite_vary_strength])
-        add_ctrl_group(ctrls, 'mixing', [overwrite_upscale_strength, mixing_image_prompt_and_vary_upscale, mixing_image_prompt_and_inpaint])
+        add_ctrl_group(ctrls, 'mixing', [mixing_image_prompt_and_vary_upscale, mixing_image_prompt_and_inpaint])
         add_ctrl_group(ctrls, 'controlnet_debug', [debugging_cn_preprocessor, skipping_cn_preprocessor, canny_low_threshold, canny_high_threshold, face_detection_threshold])
         add_ctrl_group(ctrls, 'refiner', [refiner_swap_method, controlnet_softness])
         add_ctrl_group(ctrls, 'freeu', freeu_ctrls)

@@ -73,12 +73,8 @@ GROUPS = (
         'adm_scaler_positive', 'adm_scaler_negative', 'adm_scaler_end', 'adaptive_cfg',
     )),
     ArgGroup('sampler', ('sampler_name', 'scheduler_name')),
-    ArgGroup('overwrite', (
-        'overwrite_step', 'overwrite_switch', 'overwrite_width', 'overwrite_height',
-        'overwrite_vary_strength',
-    )),
     ArgGroup('mixing', (
-        'overwrite_upscale_strength', 'mixing_image_prompt_and_vary_upscale',
+        'mixing_image_prompt_and_vary_upscale',
         'mixing_image_prompt_and_inpaint',
     )),
     ArgGroup('controlnet_debug', (
