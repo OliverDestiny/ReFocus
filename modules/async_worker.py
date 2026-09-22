@@ -3,6 +3,7 @@
 # Modified and distributed under the terms of the GNU General Public License v3.0.
 
 import threading
+import json
 import os
 from modules.patch import PatchSettings, patch_settings, patch_all
 
@@ -141,9 +142,6 @@ def worker():
         mixing_image_prompt_and_inpaint = raw['mixing_image_prompt_and_inpaint']
         debugging_cn_preprocessor = raw['debugging_cn_preprocessor']
         skipping_cn_preprocessor = raw['skipping_cn_preprocessor']
-        canny_low_threshold = raw['canny_low_threshold']
-        canny_high_threshold = raw['canny_high_threshold']
-        face_detection_threshold = raw['face_detection_threshold']
         refiner_swap_method = raw['refiner_swap_method']
         controlnet_softness = raw['controlnet_softness']
         freeu_enabled = raw['freeu_enabled']
@@ -169,9 +167,20 @@ def worker():
             cn_stop = raw[f'cn_stop_{i + 1}']
             cn_weight = raw[f'cn_weight_{i + 1}']
             cn_type = raw[f'cn_type_{i + 1}']
+            # 类型自己的参数：UI 把选中类型的取值打包成 JSON 放在这一个参数里。
+            # 解析失败要立刻报错，不能退回默认值——那会让阈值静默失效。
+            try:
+                cn_params = json.loads(raw[f'cn_params_{i + 1}'] or '{}')
+                if not isinstance(cn_params, dict):
+                    raise ValueError('not a JSON object')
+            except Exception as e:
+                raise RuntimeError(
+                    f'[ControlNet] Slot {i + 1} has unreadable cn_params_{i + 1}: {e}. '
+                    f'The UI should have sent a JSON object of the type parameters.') from e
             if cn_img is not None:
                 cn_tasks[cn_type].append(controlnet_registry.ControlNetSlot(
-                    image=cn_img, start=cn_start, stop=cn_stop, weight=cn_weight, type=cn_type))
+                    image=cn_img, start=cn_start, stop=cn_stop, weight=cn_weight, type=cn_type,
+                    params=cn_params))
 
         outpaint_selections = [o.lower() for o in outpaint_selections]
         base_model_additional_loras = []
@@ -655,14 +664,14 @@ def worker():
                     width=width,
                     height=height,
                     skipping_preprocessor=skipping_cn_preprocessor,
-                    canny_low_threshold=canny_low_threshold,
-                    canny_high_threshold=canny_high_threshold,
                     model_path=cn_model_paths.get(cn_type.name),
-                    face_detection_threshold=face_detection_threshold,
                 )
 
+                defaults = controlnet_registry.param_defaults(cn_type.name)
                 for slot in cn_tasks[cn_type.name]:
-                    slot.image, display_image = cn_type.preprocess(slot.image, ctx)
+                    # 缺失的键用声明里的默认值补齐；多余键忽略（类型切换后旧值还在 JSON 里）
+                    params = {**defaults, **(slot.params or {})}
+                    slot.image, display_image = cn_type.preprocess(slot.image, params, ctx)
                     if debugging_cn_preprocessor:
                         yield_result(async_task, display_image, black_out_nsfw, do_not_show_finished_images=True)
                         return

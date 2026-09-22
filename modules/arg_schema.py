@@ -32,7 +32,9 @@ def _lora_args() -> Tuple[str, ...]:
 
 
 def _image_prompt_args() -> Tuple[str, ...]:
-    # 每个槽 5 项，顺序与 UI 的 (Image, Start At, Stop At, Weight, Type) 一致
+    # 每个槽 6 项，顺序与 UI 的 (Image, Start At, Stop At, Weight, Type, Params) 一致。
+    # cn_params_{i} 是 JSON 字符串：该类型 param_spec 的取值。类型自己的参数走这一个槽，
+    # 所以**新增类型不会改变参数总数**（见 modules/controlnet_registry.py）。
     out = []
     for i in range(flags.controlnet_image_count):
         out.append(f'cn_image_{i + 1}')
@@ -40,6 +42,7 @@ def _image_prompt_args() -> Tuple[str, ...]:
         out.append(f'cn_stop_{i + 1}')
         out.append(f'cn_weight_{i + 1}')
         out.append(f'cn_type_{i + 1}')
+        out.append(f'cn_params_{i + 1}')
     return tuple(out)
 
 
@@ -79,7 +82,6 @@ GROUPS = (
     )),
     ArgGroup('controlnet_debug', (
         'debugging_cn_preprocessor', 'skipping_cn_preprocessor',
-        'canny_low_threshold', 'canny_high_threshold', 'face_detection_threshold',
     )),
     ArgGroup('refiner', ('refiner_swap_method', 'controlnet_softness')),
     ArgGroup('freeu', ('freeu_enabled', 'freeu_b1', 'freeu_b2', 'freeu_s1', 'freeu_s2')),

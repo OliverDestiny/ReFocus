@@ -466,6 +466,20 @@ with gradio_root:
 
                                 gr.HTML('<a href="https://github.com/lllyasviel/Fooocus/discussions/390" target="_blank">\U0001F4D4 Document</a>')
                     with gr.TabItem(label='Image Prompt') as ip_tab:
+                        def build_param_widget(spec):
+                            """按 registry 的 ParamSpec 生成控件；新增类型只要加声明，这里不用改。"""
+                            if spec.kind == 'checkbox':
+                                return gr.Checkbox(label=spec.label, value=bool(spec.default), info=spec.info)
+                            if spec.kind == 'dropdown':
+                                return gr.Dropdown(label=spec.label, choices=list(spec.choices),
+                                                   value=spec.default, info=spec.info)
+                            return gr.Slider(label=spec.label, minimum=spec.minimum, maximum=spec.maximum,
+                                             step=spec.step, value=spec.default, info=spec.info)
+
+                        param_specs = controlnet_registry.param_union()
+                        ip_param_matrix = []      # 每槽一组控件，顺序与 param_specs 一致
+                        ip_type_widgets = []
+                        ip_param_states = []
                         with gr.Row():
                             ip_ctrls = []
                             ip_ad_cols = []
@@ -489,9 +503,52 @@ with gradio_root:
 
                                         ip_type = gr.Radio(label='Type', choices=list(controlnet_registry.names()), value=controlnet_registry.DEFAULT_TYPE, container=False)
                                         ip_ctrls.append(ip_type)
+                                        ip_type_widgets.append(ip_type)
 
-                                        ip_type.change(lambda x: controlnet_registry.default_parameters(x), inputs=[ip_type], outputs=[ip_stop, ip_weight], queue=False, show_progress=False)
+                                        # 类型自己的参数：按声明生成控件，取值打包成一个 JSON 走单个契约参数
+                                        widgets, cols = [], {}
+                                        for spec in param_specs:
+                                            with gr.Column(visible=False) as param_col:
+                                                widgets.append(build_param_widget(spec))
+                                            cols[spec.name] = param_col
+                                        ip_param_matrix.append(widgets)
+
+                                        ip_params = gr.State(controlnet_registry.param_defaults(controlnet_registry.DEFAULT_TYPE))
+                                        ip_ctrls.append(ip_params)
+                                        ip_param_states.append(ip_params)
+
+                                        def on_ip_type_change(selected, _cols=cols, _specs=param_specs):
+                                            stop, weight = controlnet_registry.default_parameters(selected)
+                                            names = controlnet_registry.param_names(selected)
+                                            updates = [gr.update(visible=spec.name in names) for spec in _specs]
+                                            return updates + [stop, weight]
+
+                                        ip_type.change(on_ip_type_change, inputs=[ip_type],
+                                                       outputs=list(cols.values()) + [ip_stop, ip_weight],
+                                                       queue=False, show_progress=False)
                                     ip_ad_cols.append(ad_col)
+
+                        def collect_cn_params(*values):
+                            """把每槽选中类型的参数收成一个 JSON。
+
+                            必须排在 get_task 之前：worker 从 cn_params_{i} 里读类型参数。
+                            """
+                            n_types = len(ip_type_widgets)
+                            types = values[:n_types]
+                            flat = values[n_types:]
+                            n = len(param_specs)
+                            out = []
+                            for slot, selected in enumerate(types):
+                                names = set(controlnet_registry.param_names(selected)) if selected else set()
+                                chosen = {}
+                                for i, spec in enumerate(param_specs):
+                                    if spec.name in names:
+                                        chosen[spec.name] = flat[slot * n + i]
+                                out.append(json.dumps(chosen))
+                            return out
+
+                        cn_param_inputs = list(ip_type_widgets) + [w for row in ip_param_matrix for w in row]
+
                         ip_advanced = gr.Checkbox(label='Advanced', value=False, container=False)
                         gr.HTML('* \"Image Prompt\" is powered by Fooocus Image Mixture Engine (v1.0.1). <a href="https://github.com/lllyasviel/Fooocus/discussions/557" target="_blank">\U0001F4D4 Document</a>')
 
@@ -872,19 +929,6 @@ with gradio_root:
                         skipping_cn_preprocessor = gr.Checkbox(label='Skip Preprocessors', value=False,
                                                                info='Do not preprocess images. (Inputs are already canny/depth/cropped-face/etc.)')
 
-                        face_detection_threshold = gr.Slider(
-                            label='Face Detection Confidence Threshold',
-                            minimum=0.1, maximum=0.97, step=0.01,
-                            value=modules.config.default_face_detection_threshold,
-                            info='Only used by FaceSwap. facexlib hardcodes 0.97 internally. Real photos detect '
-                                 'fine at that value, but stylised or anime faces often do not, and when nothing '
-                                 'is detected the whole image is used instead of a face crop. Lower this to widen '
-                                 'coverage: measured gain is around 0.6 for some full-body anime images and 0.2 for '
-                                 'others, while close-up anime portraits were not detected at any threshold. '
-                                 'The crop always takes the highest-confidence face, so lowering it does not change '
-                                 'the result for images already detected. '
-                                 'The default comes from default_face_detection_threshold in config.txt.')
-
                         mixing_image_prompt_and_vary_upscale = gr.Checkbox(label='Mixing Image Prompt and Vary/Upscale',
                                                                            value=False)
                         mixing_image_prompt_and_inpaint = gr.Checkbox(label='Mixing Image Prompt and Inpaint',
@@ -894,11 +938,6 @@ with gradio_root:
                                                         step=0.001, value=0.25,
                                                         info='Similar to the Control Mode in A1111 (use 0.0 to disable). ')
 
-                        with gr.Tab(label='Canny'):
-                            canny_low_threshold = gr.Slider(label='Canny Low Threshold', minimum=1, maximum=255,
-                                                            step=1, value=64)
-                            canny_high_threshold = gr.Slider(label='Canny High Threshold', minimum=1, maximum=255,
-                                                             step=1, value=128)
 
                     with gr.Tab(label='Inpaint'):
                         debugging_inpaint_preprocessor = gr.Checkbox(label='Debug Inpaint Preprocessing', value=False)
@@ -1064,7 +1103,7 @@ with gradio_root:
         add_ctrl_group(ctrls, 'adm', [adm_scaler_positive, adm_scaler_negative, adm_scaler_end, adaptive_cfg])
         add_ctrl_group(ctrls, 'sampler', [sampler_name, scheduler_name])
         add_ctrl_group(ctrls, 'mixing', [mixing_image_prompt_and_vary_upscale, mixing_image_prompt_and_inpaint])
-        add_ctrl_group(ctrls, 'controlnet_debug', [debugging_cn_preprocessor, skipping_cn_preprocessor, canny_low_threshold, canny_high_threshold, face_detection_threshold])
+        add_ctrl_group(ctrls, 'controlnet_debug', [debugging_cn_preprocessor, skipping_cn_preprocessor])
         add_ctrl_group(ctrls, 'refiner', [refiner_swap_method, controlnet_softness])
         add_ctrl_group(ctrls, 'freeu', freeu_ctrls)
         add_ctrl_group(ctrls, 'inpaint', inpaint_ctrls)
@@ -1121,6 +1160,7 @@ with gradio_root:
         generate_button.click(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), [], True),
                               outputs=[stop_button, skip_button, generate_button, gallery, state_is_generating]) \
             .then(fn=refresh_seed, inputs=[seed_random, image_seed], outputs=image_seed) \
+            .then(fn=collect_cn_params, inputs=cn_param_inputs, outputs=ip_param_states) \
             .then(fn=get_task, inputs=ctrls, outputs=currentTask) \
             .then(fn=generate_clicked, inputs=currentTask, outputs=[progress_html, progress_window, progress_gallery, gallery]) \
             .then(lambda: (gr.update(visible=True, interactive=True), gr.update(visible=False, interactive=False), gr.update(visible=False, interactive=False), False),
