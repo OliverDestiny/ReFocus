@@ -805,6 +805,22 @@ with gradio_root:
                                             choices=modules.flags.output_formats,
                                             value=modules.config.default_output_format)
 
+                # FreeU 由 Debug Tools 转正：参数与行为都没变，只换成常显位置。
+                with gr.Group():
+                    freeu_enabled = gr.Checkbox(label='FreeU', value=modules.config.default_freeu_enabled,
+                                                info='Scales the UNet skip features; applies to the base '
+                                                     'model only (a refiner keeps its own settings).')
+                    with gr.Row():
+                        freeu_b1 = gr.Slider(label='B1', minimum=0, maximum=2, step=0.01,
+                                             value=modules.config.default_freeu_b1)
+                        freeu_b2 = gr.Slider(label='B2', minimum=0, maximum=2, step=0.01,
+                                             value=modules.config.default_freeu_b2)
+                        freeu_s1 = gr.Slider(label='S1', minimum=0, maximum=4, step=0.01,
+                                             value=modules.config.default_freeu_s1)
+                        freeu_s2 = gr.Slider(label='S2', minimum=0, maximum=4, step=0.01,
+                                             value=modules.config.default_freeu_s2)
+                freeu_ctrls = [freeu_enabled, freeu_b1, freeu_b2, freeu_s1, freeu_s2]
+
                 dev_mode = gr.Checkbox(label='Advanced mode', value=True, container=False)
 
                 with gr.Column(visible=True) as dev_tools:
@@ -915,14 +931,6 @@ with gradio_root:
                                          inpaint_strength, inpaint_respective_field,
                                          invert_mask_checkbox, inpaint_erode_or_dilate]
 
-
-                    with gr.Tab(label='FreeU'):
-                        freeu_enabled = gr.Checkbox(label='Enabled', value=False)
-                        freeu_b1 = gr.Slider(label='B1', minimum=0, maximum=2, step=0.01, value=1.01)
-                        freeu_b2 = gr.Slider(label='B2', minimum=0, maximum=2, step=0.01, value=1.02)
-                        freeu_s1 = gr.Slider(label='S1', minimum=0, maximum=4, step=0.01, value=0.99)
-                        freeu_s2 = gr.Slider(label='S2', minimum=0, maximum=4, step=0.01, value=0.95)
-                        freeu_ctrls = [freeu_enabled, freeu_b1, freeu_b2, freeu_s1, freeu_s2]
 
                 def dev_mode_checked(r):
                     return gr.update(visible=r)

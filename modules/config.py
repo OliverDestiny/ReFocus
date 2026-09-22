@@ -351,6 +351,32 @@ default_black_out_nsfw = get_config_item_or_set_default(
     default_value=False,
     validator=lambda x: isinstance(x, bool)
 )
+# FreeU（只作用于 base 模型）
+default_freeu_enabled = get_config_item_or_set_default(
+    key='default_freeu_enabled',
+    default_value=False,
+    validator=lambda x: isinstance(x, bool)
+)
+default_freeu_b1 = get_config_item_or_set_default(
+    key='default_freeu_b1',
+    default_value=1.01,
+    validator=lambda x: isinstance(x, numbers.Number)
+)
+default_freeu_b2 = get_config_item_or_set_default(
+    key='default_freeu_b2',
+    default_value=1.02,
+    validator=lambda x: isinstance(x, numbers.Number)
+)
+default_freeu_s1 = get_config_item_or_set_default(
+    key='default_freeu_s1',
+    default_value=0.99,
+    validator=lambda x: isinstance(x, numbers.Number)
+)
+default_freeu_s2 = get_config_item_or_set_default(
+    key='default_freeu_s2',
+    default_value=0.95,
+    validator=lambda x: isinstance(x, numbers.Number)
+)
 # FaceSwap 的人脸检测置信度阈值。facexlib 内部把这一步硬编码成 0.97：
 # 真实照片在 0.97 下本来就正常，动漫风格则命中率很低，且部分构图（大头照）任何阈值都检不出。
 # 默认 0.5 是为了在不影响真人照片的前提下多覆盖一些动漫图。
