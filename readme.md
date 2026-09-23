@@ -85,6 +85,8 @@ pip install -r requirements.txt
 python launch.py
 ```
 
+The UI is served at **http://127.0.0.1:12345/**. Use `python launch.py --port 8080` to change it.
+
 Place your SDXL models in `models/checkpoints/`.
 
 ---

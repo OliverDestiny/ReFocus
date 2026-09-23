@@ -139,18 +139,21 @@ If you have a previously generated ReFocus image with embedded parameters, you c
 Check the **Advanced** checkbox on the main interface to expand the settings panel on the right.
 
 The right column has three tabs: **Settings** for everyday options, **Models** for the model pickers,
-and **Advanced** for the parameters that only matter when tuning something specific.
+and **Advanced** for the parameters that only matter when tuning something specific. Settings is
+ordered by how often a normal session touches each control, most used at the top.
 
 ### Basic Parameters (Settings)
 
-- **Steps**: Higher values generally produce better details. 1–10 steps automatically switch to LCM ultra-fast mode.
-- **Width / Height**: Set the output size directly. Each slider has a number box next to it, the **⇄** button exchanges them, and the saved aspect ratios are available as buttons underneath (rows of five) which set both at once. Sizes snap to multiples of 8; SDXL is trained around one megapixel, so far larger sizes tend to cost time without adding detail.
+- **Steps**: Higher values generally produce better details. 1–10 steps automatically switch to LCM ultra-fast mode. The three buttons next to it set 45, 25 or 10.
+- **Width / Height**: Set the output size directly. Each slider has a number box next to it, the **⇄** button exchanges them, and the saved aspect ratios are available as buttons underneath (four per row) which set both at once. Sizes snap to multiples of 8; SDXL is trained around one megapixel, so the presets all keep the short side at 1024 or more.
+- **Negative Prompt**: Collapsed by default — click the heading to describe what you do not want to appear in the image.
+- **Preset**: Apply a saved preset to switch an entire parameter configuration at once.
+- **Sampling**: Tick the box to pick the sampler and scheduler manually.
+- **Seed**: Fixed seeds reproduce the same result; random seeds produce different results each time.
+- **Image Number**: Number of images to generate per batch.
+- **FreeU**: Tick the box to enable it and reveal its four coefficients (B1, B2, S1, S2). It rescales the UNet's skip features and can add background detail; it applies to the base model only, and it is off by default.
 - **Guidance & Sharpness**: Tick the box to reveal Guidance Scale and Image Sharpness, which are described under Advanced Debug Tools below.
 - **Output Format**: png, jpg or webp.
-- **FreeU**: Tick the box to enable it and reveal its four coefficients (B1, B2, S1, S2). It rescales the UNet's skip features and can add background detail; it applies to the base model only, and it is off by default.
-- **Image Number**: Number of images to generate per batch.
-- **Negative Prompt**: Describe what you do not want to appear in the image.
-- **Seed**: Fixed seeds reproduce the same result; random seeds produce different results each time.
 
 ### Models and LoRA
 

@@ -91,24 +91,44 @@ touches, **Models** for the model pickers, and **Advanced** for the parameters t
 counterpart. There is no developer-mode gate on any of it — the old "Advanced mode" checkbox only
 hid controls that are now simply in the Advanced tab.
 
-- **Settings** holds Steps (with its preset buttons), the output size, the Sampling group, Guidance
-  Scale and Image Sharpness, Output Format, FreeU, the three output flags, and the metadata options.
-  - Guidance/Sharpness and Sampling each sit behind a checkbox that reveals them, so the tab stays
-    short for the common case.
+- **Settings is ordered by how often a normal session touches a control**, top to bottom: Steps (with
+  its three preset buttons in the same row, `equal_height` so they stand at the slider's height), the
+  output size (two sliders with number boxes, a swap button, then the presets as buttons), the
+  Negative Prompt, the Preset dropdown, Sampling, Seed, Image Number, FreeU, Guidance & Sharpness,
+  Output Format, and the output/metadata switches last.
+  - The Negative Prompt is a `gr.Accordion` that starts closed — a heading with no checkbox, so the
+    textbox inside keeps its own state and the tab stays short.
+  - Sampling and Guidance/Sharpness each sit behind a checkbox that reveals them.
   - FreeU's checkbox *is* `freeu_enabled`, so ticking it enables FreeU and reveals its four
     coefficients at once. Its defaults are 1.3 / 1.4 / 0.9 / 0.2, the values upstream ComfyUI's
     `FreeU_V2` node ships (the FreeU v2 recommendation); FreeU itself stays off by default.
-  - The output size is two sliders, each with a number box, plus a swap button and the presets from
-    `config.available_aspect_ratios` rendered as buttons in rows of five — the same shape as the Steps
-    presets. Step is 8 because the shipped presets include 720 and 1080, which divide by 8 but not by
-    64. `aspect_ratios_selection` used to be a single radio list and the two `overwrite_width` /
+  - The output size presets come from `config.available_aspect_ratios` and render four to a row with
+    the size only (`1024×1536`); the ratio suffix does not fit. The `.preset_row` CSS drops the
+    theme's per-button min-width, which is what otherwise wraps them into two fat columns. Step is 8.
+    `aspect_ratios_selection` used to be a single radio list and the two `overwrite_width` /
     `overwrite_height` sliders existed only because there was no way to type a size.
+  - The shipped presets keep a short side of at least 1024 (SDXL's native scale) plus the 1024×1024
+    square: 1152×2048, 1080×1920, 1024×1536, 1536×2048, 1024×1024, 2048×1536, 1536×1024, 1920×1080.
 - **Advanced** is the Debug Tools, Control and Inpaint groups: the ADM scalers, adaptive CFG, the
   refiner swap method, the ControlNet debug switches, the mixing flags, ControlNet softness and the
   inpaint parameters. Six `overwrite_*` controls were deleted from here, because Steps is already an
   exact integer slider, Refiner Switch At expresses the same switch as a fraction, the Vary and
   Upscale tabs have their own Denoise Strength, and the width/height overwrites were replaced by the
   resolution control.
+- **Every control is defined exactly once.** The output flags and metadata options used to be defined
+  a second time in Debug Tools after they moved to Settings; the later definition won silently,
+  because the contract (`ctrls`) is assembled at the end of the module and reads the last binding —
+  the copies in Settings did nothing. `.zcode/probes/ui_probe.py` checks that no contract control
+  shares a label with a component outside the contract.
+
+### CLI arguments
+
+`modules/args_manager.py` owns ReFocus's own flags and **wins over the core for any name both
+define**: it strips its arguments from `sys.argv` before `comfy.cli_args` parses, then writes its
+values (including defaults) back into the shared namespace. `--port` is the visible case — ReFocus
+defaults to **12345**, the core's own default is 8188, and `GRADIO_SERVER_PORT` is not consulted.
+`--disable-metadata` is the other shared name. Everything else (`--listen`, `--temp-path`,
+`--disable-smart-memory`, `--fast`, …) still comes from the core.
 
 ### Stack
 
