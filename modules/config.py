@@ -357,7 +357,9 @@ default_black_out_nsfw = get_config_item_or_set_default(
     default_value=False,
     validator=lambda x: isinstance(x, bool)
 )
-# FreeU（只作用于 base 模型）
+# FreeU（只作用于 base 模型）。这四个默认值取上游 ComfyUI 的 FreeU_V2 节点默认
+# （comfy_extras/nodes_freelunch.py: b1=1.3, b2=1.4, s1=0.9, s2=0.2，即 FreeU-v2 论文的推荐值），
+# 而不是 Fooocus 那套很保守的 1.01/1.02/0.99/0.95。
 default_freeu_enabled = get_config_item_or_set_default(
     key='default_freeu_enabled',
     default_value=False,
@@ -365,22 +367,22 @@ default_freeu_enabled = get_config_item_or_set_default(
 )
 default_freeu_b1 = get_config_item_or_set_default(
     key='default_freeu_b1',
-    default_value=1.01,
+    default_value=1.3,
     validator=lambda x: isinstance(x, numbers.Number)
 )
 default_freeu_b2 = get_config_item_or_set_default(
     key='default_freeu_b2',
-    default_value=1.02,
+    default_value=1.4,
     validator=lambda x: isinstance(x, numbers.Number)
 )
 default_freeu_s1 = get_config_item_or_set_default(
     key='default_freeu_s1',
-    default_value=0.99,
+    default_value=0.9,
     validator=lambda x: isinstance(x, numbers.Number)
 )
 default_freeu_s2 = get_config_item_or_set_default(
     key='default_freeu_s2',
-    default_value=0.95,
+    default_value=0.2,
     validator=lambda x: isinstance(x, numbers.Number)
 )
 # FaceSwap 的人脸检测置信度阈值。facexlib 内部把这一步硬编码成 0.97：

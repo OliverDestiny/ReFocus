@@ -763,35 +763,36 @@ with gradio_root:
                     preset_25.click(lambda: gr.update(value=25), outputs=steps_slider)
                     preset_10.click(lambda: gr.update(value=10), outputs=steps_slider)
 
-                # 分辨率：与步数同一种形态——拉条自带数字输入框，旁边给预设（这里用下拉选完即应用）
-                # 与交换横竖。预设表仍来自 config.available_aspect_ratios。
+                # 分辨率：拉条自带数字输入框（与步数同一种形态），预设按 Steps 的做法排成按钮，
+                # 每行 5 个；预设表来自 config.available_aspect_ratios。
                 _default_w, _default_h = (int(v) for v in modules.config.default_aspect_ratio
                                           .replace('×', ' ').split(' ')[:2])
                 with gr.Row():
                     resolution_width = gr.Slider(label='Width', minimum=512, maximum=2048, step=8,
-                                                 value=_default_w, elem_id='resolution_width',
-                                                 info='Snapped to 8; SDXL is trained around 1 megapixel.')
+                                                 value=_default_w, elem_id='resolution_width')
                     resolution_height = gr.Slider(label='Height', minimum=512, maximum=2048, step=8,
-                                                  value=_default_h, elem_id='resolution_height',
-                                                  info='Swap keeps the size, presets keep the area.')
-                with gr.Row():
-                    resolution_preset = gr.Dropdown(label='Preset', choices=modules.config.available_aspect_ratios,
-                                                    value=None, interactive=True, container=False,
-                                                    info='Applies to the two sliders above.')
-                    resolution_swap = gr.Button('\u21c4 Swap', size='sm')
+                                                  value=_default_h, elem_id='resolution_height')
+                    resolution_swap = gr.Button('\u21c4', size='sm', scale=0, min_width=48)
 
-                def resolution_preset_change(preset):
-                    if not preset:
-                        return gr.update(), gr.update()
-                    w, h = (int(v) for v in preset.replace('×', ' ').split(' ')[:2])
-                    return gr.update(value=w), gr.update(value=h)
+                def make_resolution_preset_clicked(preset):
+                    # preset 必须绑进闭包，否则循环变量会让所有按钮都套用最后一个预设
+                    def clicked():
+                        w, h = (int(v) for v in preset.replace('×', ' ').split(' ')[:2])
+                        return gr.update(value=w), gr.update(value=h)
+                    return clicked
+
+                _resolution_presets = modules.config.available_aspect_ratios
+                for _row_start in range(0, len(_resolution_presets), 5):
+                    with gr.Row():
+                        for _preset in _resolution_presets[_row_start:_row_start + 5]:
+                            _preset_button = gr.Button(_preset, size='sm')
+                            _preset_button.click(make_resolution_preset_clicked(_preset),
+                                                 outputs=[resolution_width, resolution_height],
+                                                 queue=False, show_progress=False)
 
                 def resolution_swap_change(w, h):
                     return gr.update(value=h), gr.update(value=w)
 
-                resolution_preset.change(resolution_preset_change, inputs=resolution_preset,
-                                         outputs=[resolution_width, resolution_height],
-                                         queue=False, show_progress=False)
                 resolution_swap.click(resolution_swap_change, inputs=[resolution_width, resolution_height],
                                       outputs=[resolution_width, resolution_height],
                                       queue=False, show_progress=False)
@@ -810,6 +811,68 @@ with gradio_root:
                     queue=False,
                     api_name=False,
                 )
+
+                # Guidance / Sharpness：默认收起，勾选后展开（与 Sampling 同一种模式）
+                guidance_apply = gr.Checkbox(label="Guidance & Sharpness", value=False)
+                with gr.Column(visible=False) as guidance_tools:
+                    guidance_scale = gr.Slider(label='Guidance Scale', minimum=1.0, maximum=30.0, step=0.01,
+                                               value=modules.config.default_cfg_scale,
+                                               info='Higher value means style is cleaner, vivider, and more artistic.')
+                    sharpness = gr.Slider(label='Image Sharpness', minimum=0.0, maximum=30.0, step=0.001,
+                                          value=modules.config.default_sample_sharpness,
+                                          info='Higher value means image and texture are sharper.')
+                guidance_apply.change(fn=lambda x: gr.update(visible=x), inputs=guidance_apply,
+                                      outputs=guidance_tools, queue=False, api_name=False)
+
+                output_format = gr.Radio(label='Output Format',
+                                         choices=modules.flags.output_formats,
+                                         value=modules.config.default_output_format)
+
+                # FreeU：这个勾选框本身就是启用开关（freeu_enabled 是参数），勾上才展开四个系数
+                freeu_enabled = gr.Checkbox(label='FreeU', value=modules.config.default_freeu_enabled,
+                                            info='Rescales the UNet skip features; applies to the base model only.')
+                with gr.Row(visible=modules.config.default_freeu_enabled) as freeu_settings:
+                    freeu_b1 = gr.Slider(label='B1', minimum=0, maximum=2, step=0.01,
+                                         value=modules.config.default_freeu_b1)
+                    freeu_b2 = gr.Slider(label='B2', minimum=0, maximum=2, step=0.01,
+                                         value=modules.config.default_freeu_b2)
+                    freeu_s1 = gr.Slider(label='S1', minimum=0, maximum=4, step=0.01,
+                                         value=modules.config.default_freeu_s1)
+                    freeu_s2 = gr.Slider(label='S2', minimum=0, maximum=4, step=0.01,
+                                         value=modules.config.default_freeu_s2)
+                freeu_ctrls = [freeu_enabled, freeu_b1, freeu_b2, freeu_s1, freeu_s2]
+                freeu_enabled.change(fn=lambda x: gr.update(visible=x), inputs=freeu_enabled,
+                                     outputs=freeu_settings, queue=False, api_name=False)
+
+                # 输出相关开关与元数据：都是已验证的常规项，从 Debug Tools 移到这里
+                disable_preview = gr.Checkbox(label='Disable Preview', value=modules.config.default_black_out_nsfw,
+                                              interactive=not modules.config.default_black_out_nsfw,
+                                              info='Disable preview during generation.')
+                disable_intermediate_results = gr.Checkbox(label='Disable Intermediate Results',
+                                                           value=False,
+                                                           interactive=True,
+                                                           info='Disable intermediate results during generation, only show final gallery.')
+                black_out_nsfw = gr.Checkbox(label='Black Out NSFW', value=modules.config.default_black_out_nsfw,
+                                             interactive=not modules.config.default_black_out_nsfw,
+                                             info='Use black image if NSFW is detected.')
+                black_out_nsfw.change(lambda x: gr.update(value=x, interactive=not x),
+                                      inputs=black_out_nsfw, outputs=disable_preview,
+                                      queue=False, show_progress=False)
+
+                if not args_manager.args.disable_metadata:
+                    save_metadata_to_images = gr.Checkbox(
+                        label='Save Metadata to Images', value=modules.config.default_save_metadata_to_images,
+                        info='Adds parameters to generated images allowing manual regeneration.')
+                    metadata_scheme = gr.Radio(
+                        label='Metadata Scheme', choices=flags.metadata_scheme,
+                        value=first_valid(modules.config.default_metadata_scheme,
+                                          [y[1] for y in flags.metadata_scheme]),
+                        info='Image Prompt parameters are not included. Use a1111 for compatibility with Civitai.',
+                        visible=modules.config.default_save_metadata_to_images)
+                    save_metadata_to_images.change(lambda x: gr.update(visible=x),
+                                                   inputs=[save_metadata_to_images],
+                                                   outputs=[metadata_scheme],
+                                                   queue=False, show_progress=False)
 
                 image_number = gr.Slider(label='Image Number', minimum=1, maximum=modules.config.default_max_image_number, step=1, value=modules.config.default_image_number)
 
@@ -890,37 +953,11 @@ with gradio_root:
 
                 with gr.Row():
                     model_refresh = gr.Button(value='\U0001f504 Refresh All Files', variant='secondary', elem_classes='refresh_button')
+            # Advanced 里只留「调试/高级」这一档：原来的 Debug Tools / Control / Inpaint 三组。
+            # 常规项（Guidance/Sharpness、Output Format、FreeU、输出开关、元数据）都在 Settings，
+            # 原先那层 Advanced mode 勾选框随之删除。
             with gr.Tab(label='Advanced'):
-                guidance_scale = gr.Slider(label='Guidance Scale', minimum=1.0, maximum=30.0, step=0.01,
-                                           value=modules.config.default_cfg_scale,
-                                           info='Higher value means style is cleaner, vivider, and more artistic.')
-                sharpness = gr.Slider(label='Image Sharpness', minimum=0.0, maximum=30.0, step=0.001,
-                                      value=modules.config.default_sample_sharpness,
-                                      info='Higher value means image and texture are sharper.')
-                gr.HTML('<a href="https://github.com/lllyasviel/Fooocus/discussions/117" target="_blank">\U0001F4D4 Document</a>')
-                output_format = gr.Radio(label='Output Format',
-                                            choices=modules.flags.output_formats,
-                                            value=modules.config.default_output_format)
-
-                # FreeU 由 Debug Tools 转正：参数与行为都没变，只换成常显位置。
-                with gr.Group():
-                    freeu_enabled = gr.Checkbox(label='FreeU', value=modules.config.default_freeu_enabled,
-                                                info='Scales the UNet skip features; applies to the base '
-                                                     'model only (a refiner keeps its own settings).')
-                    with gr.Row():
-                        freeu_b1 = gr.Slider(label='B1', minimum=0, maximum=2, step=0.01,
-                                             value=modules.config.default_freeu_b1)
-                        freeu_b2 = gr.Slider(label='B2', minimum=0, maximum=2, step=0.01,
-                                             value=modules.config.default_freeu_b2)
-                        freeu_s1 = gr.Slider(label='S1', minimum=0, maximum=4, step=0.01,
-                                             value=modules.config.default_freeu_s1)
-                        freeu_s2 = gr.Slider(label='S2', minimum=0, maximum=4, step=0.01,
-                                             value=modules.config.default_freeu_s2)
-                freeu_ctrls = [freeu_enabled, freeu_b1, freeu_b2, freeu_s1, freeu_s2]
-
-                dev_mode = gr.Checkbox(label='Advanced mode', value=True, container=False)
-
-                with gr.Column(visible=True) as dev_tools:
+                with gr.Column(visible=True) as advanced_tools:
                     with gr.Tab(label='Debug Tools'):
                         adm_scaler_positive = gr.Slider(label='Positive ADM Guidance Scaler', minimum=0.1, maximum=3.0,
                                                         step=0.001, value=1.5, info='The scaler multiplied to positive ADM (use 1.0 to disable). ')
@@ -1012,12 +1049,6 @@ with gradio_root:
                                          inpaint_strength, inpaint_respective_field,
                                          invert_mask_checkbox, inpaint_erode_or_dilate]
 
-
-                def dev_mode_checked(r):
-                    return gr.update(visible=r)
-
-                dev_mode.change(dev_mode_checked, inputs=[dev_mode], outputs=[dev_tools],
-                                queue=False, show_progress=False)
 
                 def model_refresh_clicked():
                     modules.config.update_all_model_names()
