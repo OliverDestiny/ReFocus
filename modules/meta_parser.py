@@ -576,7 +576,7 @@ class A1111MetadataParser(MetadataParser):
 
 class FooocusMetadataParser(MetadataParser):
     def get_scheme(self) -> MetadataScheme:
-        return MetadataScheme.FOOOCUS
+        return MetadataScheme.REFOCUS
 
     def parse_json(self, metadata: dict) -> dict:
         model_filenames = modules.config.model_filenames.copy()
@@ -637,7 +637,7 @@ class FooocusMetadataParser(MetadataParser):
 
 def get_metadata_parser(metadata_scheme: MetadataScheme) -> MetadataParser:
     match metadata_scheme:
-        case MetadataScheme.FOOOCUS:
+        case MetadataScheme.REFOCUS:
             return FooocusMetadataParser()
         case MetadataScheme.A1111:
             return A1111MetadataParser()
@@ -666,13 +666,13 @@ def read_info_from_image(filepath) -> tuple[str | None, MetadataScheme | None]:
             parameters = json.loads(parameters)
 
     try:
-        metadata_scheme = MetadataScheme(metadata_scheme)
+        metadata_scheme = MetadataScheme.parse(metadata_scheme)
     except ValueError:
         metadata_scheme = None
 
         # broad fallback
         if isinstance(parameters, dict):
-            metadata_scheme = MetadataScheme.FOOOCUS
+            metadata_scheme = MetadataScheme.REFOCUS
 
         if isinstance(parameters, str):
             metadata_scheme = MetadataScheme.A1111

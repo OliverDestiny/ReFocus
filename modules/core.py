@@ -282,8 +282,13 @@ def ksampler(model, positive, negative, latent, seed=None, steps=30, cfg=7.0, sa
     if previewer_end is None:
         previewer_end = steps
 
+    warned_partial_load = False
+
     def callback(step, x0, x, total_steps):
+        nonlocal warned_partial_load
         comfy.model_management.throw_exception_if_processing_interrupted()
+        if step == 0 and not warned_partial_load:
+            warned_partial_load = warn_if_partially_loaded(model) or warned_partial_load
         y = None
         if previewer is not None and not disable_preview:
             y = previewer(x0, previewer_start + step, previewer_end)
@@ -304,6 +309,32 @@ def ksampler(model, positive, negative, latent, seed=None, steps=30, cfg=7.0, sa
     out["samples"] = samples
 
     return out
+
+
+def warn_if_partially_loaded(model, label=None):
+    """模型被 comfy 部分加载时出声。
+
+    显存不够时 `load_models_gpu` 不会报错，只会把一部分权重留在内存里、每步搬上来，
+    于是同一个模型从 ~1.7 秒/步掉到 ~98 秒/步；而且部分加载走 per-op manual_cast，
+    **数值也会变**。这种"只是变慢/悄悄变了"的失效必须显式说出来。
+
+    只能在采样过程中调用：采样一结束 comfy 就把非持久模型卸掉了，
+    那时 loaded_size() 恒为 0，会误报。
+    """
+    if label is None:
+        label = type(model.model).__name__ if hasattr(model, 'model') else 'model'
+    try:
+        patcher = getattr(model, 'patcher', model)
+        loaded, size = patcher.loaded_size(), patcher.model_size()
+    except Exception:
+        return False
+    if size <= 0 or loaded >= size - 1:
+        return False
+    free = comfy.model_management.get_free_memory() / (1024 ** 3)
+    print(f'[{label}] WARNING: only {loaded / 1024 ** 3:.2f}G of {size / 1024 ** 3:.2f}G of the model '
+          f'is in VRAM ({free:.2f}G free), so every step streams weights from system memory and can '
+          f'take a minute or more. Lower the resolution, close other GPU applications, or free memory.')
+    return True
 
 
 @torch.no_grad()

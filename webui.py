@@ -138,8 +138,17 @@ def generate_clicked(task):
                 break
 
         # ---- overtime detection based on idle time ----
-        if time.perf_counter() - last_activity_time > 60:
-            print("[Warning] No progress for 60 seconds, forcing finish to prevent UI freeze.")
+        # 「没有新 yield」不等于「卡死」：采样中的一步就可能远超 60 秒（显存不够时 comfy 会把模型
+        # 部分加载、每步从内存搬权重）。这时若强退，界面会显示成"生成结束"、Stop/Skip 按钮消失，
+        # 而 worker 还在跑 —— 用户看到的就是「Stop/Skip 失灵」。所以 worker 仍在处理中就继续等，
+        # 只在一个明显超过任何合理单步耗时的上限之后才兜底退出。
+        idle = time.perf_counter() - last_activity_time
+        still_processing = bool(getattr(task, 'processing', False))
+        idle_limit = 1800 if still_processing else 60
+        if idle > idle_limit:
+            print(f"[Warning] No progress for {idle:.0f} seconds"
+                  f"{' while the worker is still processing' if still_processing else ''}, "
+                  f"forcing finish to prevent UI freeze.")
             yield gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), \
                 gr.update(visible=True, value=task.results if hasattr(task, 'results') and task.results else [])
             finished = True

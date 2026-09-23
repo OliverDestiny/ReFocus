@@ -158,7 +158,8 @@ def worker():
         inpaint_erode_or_dilate = raw['inpaint_erode_or_dilate']
 
         save_metadata_to_images = raw['save_metadata_to_images'] if not args_manager.args.disable_metadata else False
-        metadata_scheme = MetadataScheme(raw['metadata_scheme']) if not args_manager.args.disable_metadata else MetadataScheme.FOOOCUS
+        metadata_scheme = (MetadataScheme.parse(raw['metadata_scheme'])
+                           if not args_manager.args.disable_metadata else MetadataScheme.REFOCUS)
 
         cn_tasks = controlnet_registry.new_task_map()
         for i in range(flags.controlnet_image_count):

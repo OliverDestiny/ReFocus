@@ -335,8 +335,9 @@ default_save_metadata_to_images = get_config_item_or_set_default(
 )
 default_metadata_scheme = get_config_item_or_set_default(
     key='default_metadata_scheme',
-    default_value=MetadataScheme.FOOOCUS.value,
-    validator=lambda x: x in [y[1] for y in modules.flags.metadata_scheme if y[1] == x]
+    default_value=MetadataScheme.REFOCUS.value,
+    # 接受旧值 'fooocus'：这项改名之前写的 config.txt 里就是它，不必为此在启动时报警
+    validator=lambda x: x in [y[1] for y in modules.flags.metadata_scheme if y[1] == x] or x == 'fooocus'
 )
 metadata_created_by = get_config_item_or_set_default(
     key='metadata_created_by',

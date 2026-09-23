@@ -82,12 +82,22 @@ desc_type_anime = 'Art/Anime'
 
 
 class MetadataScheme(Enum):
-    FOOOCUS = 'fooocus'
+    REFOCUS = 'refocus'
     A1111 = 'a1111'
+
+    @classmethod
+    def parse(cls, value):
+        """容忍旧值：本项改名之前生成的图写的是 'fooocus'。"""
+        if value == 'fooocus':
+            return cls.REFOCUS
+        try:
+            return cls(value)
+        except ValueError:
+            return None
 
 
 metadata_scheme = [
-    (f'{MetadataScheme.FOOOCUS.value} (json)', MetadataScheme.FOOOCUS.value),
+    (f'{MetadataScheme.REFOCUS.value} (json)', MetadataScheme.REFOCUS.value),
     (f'{MetadataScheme.A1111.value} (plain text)', MetadataScheme.A1111.value),
 ]
 
