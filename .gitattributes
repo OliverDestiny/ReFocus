@@ -1,0 +1,45 @@
+# 行尾统一为 LF。
+#
+# 为什么必须显式写出来：仓库里的文件曾经以 CRLF 提交（包括 comfy/ 整个 vendored 核心），
+# 而 `core.autocrlf=true` 会让「工作区是 CRLF、索引是 LF」这类状态随机器而变，
+# 结果是跨分支合并时把整文件当成改动（500 行级别的假差异），
+# 更严重的是 comfy/ 与上游 ComfyUI（LF）不再逐字节一致 —— 而「未改动的可对照副本」
+# 正是这个项目换核心 tag 的前提（见 README_DEV 的 Vendored core 一节）。
+* text=auto eol=lf
+
+# 这几类要显式声明为 text：git 的内容启发式曾把 README_DEV.md 判成「二进制」（-text），
+# 于是 `core.autocrlf=true` 的 clean 过滤器不会跑，编辑时保留的 CRLF 会被原样提交进去，
+# 结果与另一条分支（LF）合并时整文件冲突。显式 text 就不依赖启发式了。
+*.md text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.html text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制与打包产物不做任何转换
+# （*.model 是 SentencePiece 词表，comfy/ 里那份必须与上游逐字节一致，绝不能做行尾转换）
+*.model -text
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.webp -text
+*.gif -text
+*.ico -text
+*.safetensors -text
+*.ckpt -text
+*.pt -text
+*.pth -text
+*.bin -text
+*.onnx -text
+*.patch -text
+*.fooocus.patch -text
+*.woff -text
+*.woff2 -text
+*.ttf -text
