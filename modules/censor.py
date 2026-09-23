@@ -2,9 +2,8 @@
 import numpy as np
 
 from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionSafetyChecker
-# transformers 5.x 的 AutoFeatureExtractor 只覆盖音频类模型，图像预处理器已迁到
-# AutoImageProcessor。安全检测器的 preprocessor_config.json 没有 feature_extractor_type，
-# 用 AutoFeatureExtractor 会抛 "Unrecognized feature extractor in CompVis/stable-diffusion-safety-checker"。
+# AutoImageProcessor, not AutoFeatureExtractor: transformers 5.x only ships image processors,
+# and the safety checker's preprocessor_config.json has no feature_extractor_type.
 from transformers import AutoImageProcessor
 from PIL import Image
 import modules.config

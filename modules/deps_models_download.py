@@ -200,8 +200,8 @@ def ensure_vae_interposer_model():
     """ensure VAE interposer model (xl-to-v1) exists"""
     _download_with_fallback(
         mirror_url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/xl-to-v1_interposer-v3.1.safetensors',
-        official_url=None,  # 社区模型，无官方源
-        model_dir=path_vae_approx,  # 注意：需要导入 path_vae_approx
+        official_url=None,  # community model, no official source
+        model_dir=path_vae_approx,  # requires the path_vae_approx import above
         file_name='xl-to-v1_interposer-v3.1.safetensors'
     )
 

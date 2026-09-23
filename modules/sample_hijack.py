@@ -2,15 +2,11 @@
 # Original work Copyright (c) 2023 lllyasviel (Fooocus) & 2024 ehristoforu (DeFooocus).
 # Modified and distributed under the terms of the GNU General Public License v3.0.
 
-"""跨模型条件切换的工具 + 核心调度器表的补充注册。
+"""Cross-model conditioning helpers plus registration of the extra schedulers the UI exposes.
 
-迁移到现代核心后，这里原来的 `sample_hacked`（旧 `samplers.sample` 的整份拷贝，用来做
-refiner 中途切换）已删除——它依赖的 `wrap_model` 在现代核心中不存在，而 refiner 切换
-现在由 `process_diffusion` 的原生两遍采样完成。同理 `calculate_sigmas_scheduler_hacked`
-也已删除，改为往核心的 `SCHEDULER_HANDLERS` 注册。
-
-剩下的 `clip_separate*` 不是补丁，是纯工具：把文本条件按目标模型切分
-（SDXLRefiner 取后 1280 维、SDXL 原样、SD1.5 取前 768 维并重跑 clip_l 的 final_layer_norm）。
+`clip_separate*` cut text conditioning for the target model (SDXLRefiner: last 1280 dims; SDXL:
+as-is; SD1.5: first 768 dims with clip_l's final_layer_norm rerun). `sample_hacked` and
+`calculate_sigmas_scheduler_hacked` are gone; refiner swapping uses process_diffusion's two passes.
 """
 
 import torch
@@ -67,17 +63,8 @@ def clip_separate(cond, target_model=None, target_clip=None):
 
 
 def register_extra_schedulers():
-    """把核心没有、但 UI 暴露的调度器注册进去。
-
-    `turbo` 与 `lcm` 不在现代 `SCHEDULER_HANDLERS` 里，而 `KSampler.__init__` 对未知
-    调度器会**静默降级为 `SCHEDULERS[0]`（simple）**——不报错，只是换了算法。
-    所以必须显式注册。
-
-    `lcm` 不在此处注册：`async_worker` 在 LCM 模式下会先把调度器改写成 `sgm_uniform`
-    （核心已有），`lcm` 只作为 UI 选项存在。
-
-    `SCHEDULER_NAMES` 是独立的一份 list，`KSampler.SCHEDULERS` 引用的正是它，
-    因此必须原地 append 而不是重新赋值。
+    """Register 'turbo', which the UI exposes but the core's SCHEDULER_HANDLERS does not have.
+    An unknown name makes KSampler.__init__ silently fall back to SCHEDULERS[0] (simple), not an error.
     """
     if 'turbo' not in comfy.samplers.SCHEDULER_HANDLERS:
         comfy.samplers.SCHEDULER_HANDLERS['turbo'] = comfy.samplers.SchedulerHandler(comfy_ops.turbo_sigmas)

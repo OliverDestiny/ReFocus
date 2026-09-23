@@ -2,12 +2,11 @@
 # Original work Copyright (c) 2023 lllyasviel (Fooocus) & 2024 ehristoforu (DeFooocus).
 # Modified and distributed under the terms of the GNU General Public License v3.0.
 
-"""参数契约的单一事实来源。
+"""Single source of truth for the argument contract: order and count only.
 
-UI 侧（webui.py 组装 ctrls）与 worker 侧（async_worker.py 解析 args）都以此表为准。
-两端各有一处断言：任一端增删或调序参数而未同步，启动时即报错，而不是让后续所有参数静默错位。
-
-本表只负责【顺序】与【数量】，不做类型转换——类型转换留在消费点，避免把两件事混在一起。
+UI (webui.py builds ctrls) and worker (async_worker.py parses args) both follow this table, so an
+unsynchronized change fails at startup instead of silently shifting every later argument.
+Type conversion stays at the consumption site.
 """
 
 from dataclasses import dataclass
@@ -32,9 +31,8 @@ def _lora_args() -> Tuple[str, ...]:
 
 
 def _image_prompt_args() -> Tuple[str, ...]:
-    # 每个槽 6 项，顺序与 UI 的 (Image, Start At, Stop At, Weight, Type, Params) 一致。
-    # cn_params_{i} 是 JSON 字符串：该类型 param_spec 的取值。类型自己的参数走这一个槽，
-    # 所以**新增类型不会改变参数总数**（见 modules/controlnet_registry.py）。
+    # 6 entries per slot, in UI order: Image, Start At, Stop At, Weight, Type, Params.
+    # Type parameters ride in cn_params_{i} as JSON; docs/README_DEV.md, ControlNet types section.
     out = []
     for i in range(flags.controlnet_image_count):
         out.append(f'cn_image_{i + 1}')
@@ -47,7 +45,7 @@ def _image_prompt_args() -> Tuple[str, ...]:
 
 
 def _metadata_enabled() -> bool:
-    # 延迟导入，避免模块加载期的导入顺序问题
+    # Deferred import: avoids an import-order problem at module load time
     import modules.args_manager as args_manager
     return not args_manager.args.disable_metadata
 
@@ -104,7 +102,7 @@ def active_args() -> Tuple[str, ...]:
 
 
 def total() -> int:
-    """当前配置下 worker 应消费的参数个数（不含 currentTask 本身）。"""
+    """Number of arguments the worker consumes under the current config (currentTask excluded)."""
     return len(active_args())
 
 

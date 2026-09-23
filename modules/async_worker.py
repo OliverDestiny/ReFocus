@@ -90,8 +90,8 @@ def worker():
         args = async_task.args
         args.reverse()
 
-        # 参数顺序的单一事实来源是 modules/arg_schema.py。
-        # 这里按表消费，顺序永远与 UI 一致；长度不符时立刻报错而不是静默错位。
+        # Argument order has one source of truth: modules/arg_schema.py.
+        # Consumed by that table, so it always matches the UI; a length mismatch raises instead of shifting.
         expected_args = arg_schema.active_args()
         if len(args) != len(expected_args):
             raise RuntimeError(
@@ -168,8 +168,8 @@ def worker():
             cn_stop = raw[f'cn_stop_{i + 1}']
             cn_weight = raw[f'cn_weight_{i + 1}']
             cn_type = raw[f'cn_type_{i + 1}']
-            # 类型自己的参数：UI 把选中类型的取值打包成 JSON 放在这一个参数里。
-            # 解析失败要立刻报错，不能退回默认值——那会让阈值静默失效。
+            # Type-specific parameters: the UI packs them into this one JSON argument. Unreadable
+            # JSON must raise rather than fall back to defaults: a fallback hides a dead threshold.
             try:
                 cn_params = json.loads(raw[f'cn_params_{i + 1}'] or '{}')
                 if not isinstance(cn_params, dict):
@@ -349,7 +349,7 @@ def worker():
                             inpaint_mask = inpaint_mask.astype(np.uint8)
                     inpaint_mask = (inpaint_mask > 127).astype(np.uint8) * 255
 
-                    # 顺序与 UI 提示一致：先腐蚀/膨胀，再取反
+                    # Order matches the UI hint: erode/dilate first, then invert
                     if inpaint_erode_or_dilate != 0:
                         inpaint_mask = erode_or_dilate(inpaint_mask, inpaint_erode_or_dilate)
 
@@ -638,16 +638,8 @@ def worker():
                 )
 
             if not inpaint_disable_initial_latent:
-                # 这里**不要**加 'noise_mask'。实测加上的后果是：在遮罩外围那个放大的
-                # 矩形裁剪区里出现噪点、原有像素被破坏。
-                #
-                # 原因：本项目的遮罩不是靠采样期的 denoise_mask 实现的，而是靠两件事——
-                #   1) 参数化 inpaint 头（inpaint_worker.patch 把 latent mask 注入 UNet），
-                #      它是在「完整 latent」上训练的，被采样期遮罩后的输入与它预期不符；
-                #   2) 回贴时的 color_correction 按 mask 与原图混合（post_process）。
-                # 再加上采样期遮罩等于同一件事做两遍，且与 inpaint 头互相冲突。
-                # 旧实现里 patched_KSamplerX0Inpaint_forward 的逐帧混合已被删除，
-                # 但它对本项目并非必需——去掉之后遮罩行为反而是正确的。
+                # Do not add 'noise_mask' here: it puts noise outside the mask in the enlarged crop
+                # region and destroys existing pixels; masking works through the inpaint head instead.
                 initial_latent = {'samples': latent_fill}
 
             B, C, H, W = latent_fill.shape
@@ -656,7 +648,7 @@ def worker():
             print(f'Final resolution is {str((final_height, final_width))}, latent is {str((height, width))}.')
 
         if 'cn' in goals:
-            # 一次遍历覆盖所有类型：预处理本身由注册表里各类型的 preprocess 负责
+            # Single pass over all types; the per-type preprocess in the registry does the real work
             for cn_type in controlnet_registry.TYPES:
                 if not cn_tasks[cn_type.name]:
                     continue
@@ -670,7 +662,8 @@ def worker():
 
                 defaults = controlnet_registry.param_defaults(cn_type.name)
                 for slot in cn_tasks[cn_type.name]:
-                    # 缺失的键用声明里的默认值补齐；多余键忽略（类型切换后旧值还在 JSON 里）
+                    # Missing keys fall back to the declared defaults; extra keys are ignored,
+                    # since the JSON keeps stale values from a previous type switch.
                     params = {**defaults, **(slot.params or {})}
                     slot.image, display_image = cn_type.preprocess(slot.image, params, ctx)
                     if debugging_cn_preprocessor:

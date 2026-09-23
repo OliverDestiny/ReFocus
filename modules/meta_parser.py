@@ -27,40 +27,12 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
         loaded_parameter_dict = json.loads(raw_metadata)
     assert isinstance(loaded_parameter_dict, dict)
 
-    # 输出顺序必须与 webui.py 中 load_data_outputs 的顺序完全一致
-    # [0] advanced_checkbox
-    # [1] image_number
-    # [2] prompt
-    # [3] negative_prompt
-    # [4] steps_slider
-    # [5] resolution_width
-    # [6] resolution_height
-    # [7] guidance_scale
-    # [8] sharpness
-    # [9] adm_scaler_positive
-    # [10] adm_scaler_negative
-    # [11] adm_scaler_end
-    # [12] refiner_swap_method
-    # [13] adaptive_cfg
-    # [14] base_model
-    # [15] refiner_model
-    # [16] refiner_switch
-    # [17] sampler_name
-    # [18] scheduler_name
-    # [19] seed_random
-    # [20] image_seed
-    # [21] generate_button
-    # [22] load_parameter_button
-    # [23] freeu_enabled
-    # [24] freeu_b1
-    # [25] freeu_b2
-    # [26] freeu_s1
-    # [27] freeu_s2
-    # [28..] lora_combined (pairs)
+    # Output order must match webui.py load_data_outputs exactly (index 0..27, then lora pairs);
+    # the lists are positional, so a result added here has to be added there too.
 
     results = []
 
-    # 辅助函数：获取值，若不存在则返回默认
+    # Value lookup by key, then fallback key, then default
     def get_value(key, fallback=None, default=None):
         v = loaded_parameter_dict.get(key, loaded_parameter_dict.get(fallback, default))
         return v
@@ -84,7 +56,7 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
     neg_prompt = get_value('negative_prompt', 'Negative Prompt', '')
     results.append(neg_prompt if isinstance(neg_prompt, str) else gr.update())
 
-    # 5. steps_slider (int)  直接从 'steps' 读取
+    # 5. steps_slider (int)  read directly from 'steps'
     steps_val = get_value('steps', 'Steps', 25)
     try:
         steps_val = int(steps_val)
@@ -95,12 +67,12 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
         results.append(gr.update())
 
     # 6-7. resolution -> resolution_width / resolution_height
-    # 值可能是 int（fooocus 方案写成 "(1024, 1536)"）或字符串（a1111 的 "1024x1536" 与预设），统一转 int。
+    # May be a tuple-like string ("(1024, 1536)") or "1024x1536"; both are converted to int.
     res = get_value('resolution', 'Resolution', None)
     if res is not None:
         try:
             width, height = eval(res)
-            # 夹到滑条范围：超出范围的值 Gradio 会在请求期拒绝（和 choices 同一类问题）
+            # Clamp to the slider range: Gradio rejects out-of-range values at request time.
             results.append(min(max(int(width), 512), 2048))
             results.append(min(max(int(height), 512), 2048))
         except:
@@ -141,7 +113,7 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
         results.append(gr.update())
         results.append(gr.update())
 
-    # 16. refiner_swap_method (str) —— 不在控件 choices 里就保持当前值
+    # 16. refiner_swap_method (str): keep the current value if it is not in the widget's choices
     refiner_swap = get_value('refiner_swap_method', 'Refiner Swap Method', flags.refiner_swap_method)
     results.append(refiner_swap if refiner_swap in ['joint', 'separate', 'vae'] else gr.update())
 
@@ -152,8 +124,8 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
     except:
         results.append(gr.update())
 
-    # 18. base_model (str) —— 旧图里的模型名可能已经被改名/删除，不在列表里就保持当前值，
-    # 否则会作为「不在 choices 里的 value」写进 Dropdown，在请求期把应用打挂。
+    # 18. base_model (str): an old image may name a model that was renamed or deleted, so keep the
+    # current value instead of writing a value outside the Dropdown's choices.
     base = get_value('base_model', 'Base Model', '')
     results.append(base if base in modules.config.model_filenames else gr.update())
 
@@ -225,7 +197,7 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
             try:
                 n, w = lora_val.split(' : ')
                 w = float(w)
-                # 同理：旧图里的 LoRA 可能已被删除，不在列表里就回落到 None
+                # Same for LoRAs: a name no longer in the list falls back to None
                 if n in ['None'] + modules.config.lora_filenames:
                     results.append(n)
                     results.append(w)
@@ -674,9 +646,8 @@ def read_info_from_image(filepath) -> tuple[str | None, MetadataScheme | None]:
 
     metadata_scheme = MetadataScheme.parse(metadata_scheme)
     if metadata_scheme is None:
-        # 图里没有 scheme 标记（纯 A1111 的 PNG，或 A1111 的 JPEG/WebP 没有 MakerNote）：
-        # 按参数形态推断。注意这里**不能**靠 parse 抛异常来触发 —— parse 内部吞掉 ValueError
-        # 并返回 None，用 try/except 包住它是死代码（曾经就是这么写的）。
+        # No scheme tag in the image (plain A1111 PNG, or A1111 JPEG/WebP without MakerNote), so
+        # infer it from the parameter shape; parse() returns None instead of raising.
         if isinstance(parameters, dict):
             metadata_scheme = MetadataScheme.REFOCUS
         elif isinstance(parameters, str):

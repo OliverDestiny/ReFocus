@@ -57,7 +57,7 @@ cn_ip = "ImagePrompt"
 cn_ip_face = "FaceSwap"
 cn_canny = "PyraCanny"
 cn_cpds = "CPDS"
-# 类型清单、默认 (stop, weight)、加载与预处理都在 modules/controlnet_registry.py
+# Type list, defaults (stop, weight), loading and preprocessing live in modules/controlnet_registry.py
 
 inpaint_engine_versions = ['None', 'v1', 'v2.5', 'v2.6']
 
@@ -87,7 +87,7 @@ class MetadataScheme(Enum):
 
     @classmethod
     def parse(cls, value):
-        """容忍旧值：本项改名之前生成的图写的是 'fooocus'。"""
+        """Accepts the legacy value: images written before the rename carry 'fooocus'."""
         if value == 'fooocus':
             return cls.REFOCUS
         try:

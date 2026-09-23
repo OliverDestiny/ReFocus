@@ -2,30 +2,10 @@
 # Original work Copyright (c) 2023 lllyasviel (Fooocus) & 2024 ehristoforu (DeFooocus).
 # Modified and distributed under the terms of the GNU General Public License v3.0.
 
-"""ReFocus 对推理核心的注入层。
+"""Injection layer between ReFocus and the vendored ComfyUI core.
 
-**这个文件是 ReFocus 与上游 ComfyUI 的全部耦合面，越小越好。**
-
-原则（见 .zcode/phase-d-migration-plan.md）：
-- 能用核心的扩展接口就不要替换核心内部。`patcher_extension` 的 `WrapperExecutor`
-  与 `model_options` 系列钩子是上游冻结的接口（`patcher_extension.py` 12 个月只改了 5 行），
-  改走这些接口的补丁不会随上游 churn 而失效。
-- 只保留上游确实没有的能力。迁移到现代核心后，原来 9 个补丁里 6 个已被上游原生实现，
-  直接删除而不是移植：
-
-  | 原补丁 | 处置 |
-  |---|---|
-  | ModelPatcher.calculate_weight | 删：现代走 comfy.lora + weight_adapter |
-  | UNetModel.forward | 删：现代原生支持 input/output_block_patch |
-  | KSamplerX0Inpaint.forward | 删：现代 __call__ 就是同一套混合，且支持 denoise_mask_function |
-  | BrownianTreeNoiseSampler | 删：现代 sampler 自己构建同样的噪声场 |
-  | samplers.sampling_function | 删：改挂 model_options["sampler_cfg_function"] |
-  | SDXL.encode_adm | **保留**：现代无对应，是 Fooocus ADM 引导的核心 |
-  | ControlNet.forward | 收敛为薄包装：只做 timed_adm 与 softness，其余交给上游（含 union） |
-  | load_models_gpu 计时 | 保留（仅计时） |
-  | build_loaded 权重纠错 | 保留（与核心无关） |
-
-  `modules/patch_precision.py` 整文件删除：上游已收敛到同样数值，它早已是空操作。
+Keep this file minimal: it is the whole coupling surface to upstream, and only abilities
+upstream lacks belong here. See README_DEV, "Vendored core (`comfy/`)".
 """
 
 import os
@@ -57,7 +37,7 @@ class PatchSettings:
         self.negative_adm_scale = negative_adm_scale
         self.controlnet_softness = controlnet_softness
         self.adaptive_cfg = adaptive_cfg
-        # VAE refiner swap 需要把采样过程中的 eps 记下来；None 表示不记录。
+        # The VAE refiner swap records eps during sampling; None disables recording.
         self.eps_record = None
 
 
@@ -65,12 +45,12 @@ patch_settings = {}
 
 
 def settings():
-    """取当前进程的 PatchSettings。由 async_worker 在每个任务开始时写入。"""
+    """Return this process's PatchSettings, written by async_worker at each task start."""
     return patch_settings[os.getpid()]
 
 
 # ---------------------------------------------------------------------------
-# ADM 引导（上游无对应，必须保留）
+# ADM guidance (no upstream equivalent, so it must stay)
 # ---------------------------------------------------------------------------
 
 def round_to_64(x):
@@ -83,10 +63,7 @@ def round_to_64(x):
 
 
 def timed_adm(y, timesteps):
-    """按 adm_scaler_end 让 ADM 在采样后段淡出。
-
-    现代 UNet 不做这件事，所以它同时用在 UNet 与 ControlNet 两条 y 上。
-    """
+    """Fade ADM out over late steps per adm_scaler_end; upstream lacks this, so apply it to both y paths."""
     if isinstance(y, torch.Tensor) and int(y.dim()) == 2 and int(y.shape[1]) == 5632:
         y_mask = (timesteps > 999.0 * (1.0 - float(settings().adm_scaler_end))).to(y)[..., None]
         y_with_adm = y[..., :2816].clone()
@@ -127,22 +104,15 @@ def sdxl_encode_adm_patched(self, **kwargs):
 
 
 # ---------------------------------------------------------------------------
-# CFG 钩子：锐度 + adaptive CFG（TSNR 仿制）+ eps_record
-#
-# 原来这是对 comfy.samplers.sampling_function 的整函数替换。现在改挂
-# model_options["sampler_cfg_function"]——上游自己的节点也这么做，属于官方扩展点。
+# CFG hook: sharpness + adaptive CFG (TSNR mimicry) + eps_record
+# Replaces the old whole-function swap of comfy.samplers.sampling_function; attached through
+# model_options["sampler_cfg_function"], the same extension point upstream nodes use.
 # ---------------------------------------------------------------------------
 
 def diffusion_progress(model, sigma):
-    """把当前 sigma 换算成 0~1 的扩散进度。
+    """Convert sigma to 0..1 diffusion progress via the model's own model_sampling.timestep.
 
-    旧实现由被替换掉的 UNet.forward 写入 global_diffusion_progress（1 - timestep/999）。
-    现在没有那个钩子了，改用 model_sampling.timestep(sigma) 得到同一个离散 timestep。
-
-    注意这里拿到的是 BaseModel（不是 ModelPatcher，`get_model_object` 在后者身上），
-    所以读的是模型自带的 model_sampling，而不是被 add_object_patch 替换过的那个。
-    只有 LCM 模式会替换 model_sampling，而 LCM 下 sharpness 被强制为 0、cfg 为 1，
-    本函数的结果在那种配置下不会被 consume（alpha 恒为 0，且 compute_cfg 的 t 不参与）。
+    Only LCM swaps model_sampling, and LCM forces sharpness 0 / cfg 1, so the stale value is unused there.
     """
     t = model.model_sampling.timestep(sigma)
     return float(1.0 - (t.flatten()[0].item() / 999.0))
@@ -162,13 +132,9 @@ def compute_cfg(uncond, cond, cfg_scale, t):
 
 
 def custom_sampler_cfg_function(args):
-    """comfy 的 sampler_cfg_function 接口。
+    """comfy sampler_cfg_function: cond/uncond arrive as eps and the return value must be eps too.
 
-    上游 comfy/samplers.py 的 cfg_function 传入的 cond/uncond 已经是 eps（x - denoised），
-    并要求返回最终 eps，因为 cfg_result = x - 返回值。
-
-    CFG≈1 时上游会跳过 uncond 分支（除非 model_options 里 disable_cfg1_optimization），
-    此时 args["uncond"] 来自零张量分支、等于 x，不可使用，所以此处单独处理。
+    At cfg ~= 1 upstream skips the uncond branch, so args["uncond"] is x and cannot be used here.
     """
     x = args["input"]
     sigma = args["sigma"]
@@ -194,13 +160,9 @@ def custom_sampler_cfg_function(args):
 
 
 def attach_model_hooks(model):
-    """把 CFG 钩子与 UNet 包装器挂到模型上。base 与 refiner 两个 unet 都要挂。
+    """Attach the CFG hook and the UNet wrapper to one model; call it for base and refiner both.
 
-    为什么需要 model_function_wrapper：旧实现删掉的 `patched_unet_forward` 里有一步
-    `y = timed_adm(y, timesteps)`，把 Fooocus 的双份 ADM（5632 维）在进入 label_emb 前
-    压回 2816。删掉那个 forward 之后没人做这件事，于是 5632 直接喂给期望 2816 的
-    label_emb，报 "mat1 and mat2 shapes cannot be multiplied (2x5632 and 2816x1280)"。
-    现在用核心冻结的 model_function_wrapper 挂在同一位置。
+    The wrapper re-applies timed_adm, compressing the 5632-wide double ADM back to 2816 before label_emb.
     """
     global _active_model_sampling
     _active_model_sampling = model.get_model_object("model_sampling")
@@ -210,15 +172,12 @@ def attach_model_hooks(model):
     def unet_wrapper(apply_model, args):
         c = args["c"]
 
-        # args["timestep"] 是 sigma（k-diffusion 把 sigma 一路传到 predict_noise，
-        # 见 comfy/samplers.py 里 transformer_options["sigmas"] = timestep），
-        # 而 timed_adm 与 current_step 用的都是 0~999 的离散 timestep，必须先换算。
-        # 用 model_sampling 走 get_model_object，以便取到 LCM 替换过的那份。
+        # args["timestep"] is sigma, while timed_adm and current_step need a 0..999 discrete timestep.
+        # Read model_sampling through get_model_object so the LCM-replaced one is picked up.
         t = model.get_model_object("model_sampling").timestep(args["timestep"])
 
-        # current_step = 扩散进度（0~1），原先由被删掉的 patched_unet_forward 写入，
-        # extras/ip_adapter.py:210 读它来决定 IP-Adapter 在本步是否生效（与 cn_stop 比较）。
-        # 它必须是张量：读取方用 .detach().cpu().numpy()[0]。
+        # current_step is the 0..1 diffusion progress; extras/ip_adapter.py:210 reads it to decide
+        # whether IP-Adapter applies at this step (against cn_stop). It must stay a tensor.
         model.model.diffusion_model.current_step = 1.0 - t / 999.0
 
         if c.get("y") is not None:
@@ -230,21 +189,15 @@ def attach_model_hooks(model):
 
 
 # ---------------------------------------------------------------------------
-# ControlNet：薄包装，而不是重写整个 forward
-#
-# 现代 cldm.ControlNet.forward 自己处理 union controlnet，返回
-# {"middle": [...], "output": [...]}（controlnet.py 的 control_merge 按 dict 迭代）。
-# 我们只做两件上游没有的事：入口的 timed_adm、出口的 softness 缩放。
-# 这样上游对 forward 的改动都能直接继承。
+# ControlNet: thin wrapper, not a rewrite of the whole forward
+# Upstream forward already handles union ControlNets and the {"middle", "output"} dict return;
+# this only adds timed_adm at entry and softness scaling at exit, so upstream changes carry over.
 # ---------------------------------------------------------------------------
 
 _cldm_forward_origin = None
 
-# ControlNet 的 forward 拿不到模型，而 timed_adm 需要 0~999 的离散 timestep
-# （它收到的是 sigma，见 samplers.py 里 get_control(input_x, timestep_, ...)）。
-# 所以在挂 hook 时把 model_sampling 记下来，供这里换算。
-# 局限：base 与 refiner 同时存在时只保留最后一个；两者的调度若不同，
-# assert_model_integrity 已经会告警。
+# ControlNet.forward receives sigma and no model handle, so stash model_sampling at hook time
+# for the conversion here. Only the last one is kept if base and refiner are both mounted.
 _active_model_sampling = None
 
 
@@ -266,7 +219,7 @@ def patched_cldm_forward(self, x, hint, timesteps, context, y=None, **kwargs):
 
 
 # ---------------------------------------------------------------------------
-# 模型管理计时与权重加载纠错（与核心行为无关，保留）
+# Model-management timing and corrupted-weight recovery (independent of core behaviour)
 # ---------------------------------------------------------------------------
 
 def patched_load_models_gpu(*args, **kwargs):
@@ -313,15 +266,11 @@ def build_loaded(module, loader_name):
 
 
 # ---------------------------------------------------------------------------
-# 安装
+# Installation
 # ---------------------------------------------------------------------------
 
 def _install(target, name, replacement):
-    """替换属性并立即断言确实生效。
-
-    这是防「静默失效」的闸：上游改了内部结构时，补丁可能装上但不再被调用，
-    或者干脆装不上。这里让它在启动时就报错，而不是悄悄失去效果。
-    """
+    """Replace an attribute and assert it took effect, so a changed vendored core fails at startup."""
     setattr(target, name, replacement)
     if getattr(target, name) is not replacement:
         raise RuntimeError(
@@ -341,7 +290,7 @@ def patch_all():
         comfy.model_management.load_models_gpu_origin = comfy.model_management.load_models_gpu
     _install(comfy.model_management, 'load_models_gpu', patched_load_models_gpu)
 
-    # 只捕获一次原始 forward，重复调用 patch_all() 不会把它覆盖成补丁本身
+    # Capture the original forward once; repeated patch_all() calls must not save the patched one.
     if _cldm_forward_origin is None:
         _cldm_forward_origin = comfy.cldm.cldm.ControlNet.forward
     _install(comfy.cldm.cldm.ControlNet, 'forward', patched_cldm_forward)

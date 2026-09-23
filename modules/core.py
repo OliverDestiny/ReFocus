@@ -83,7 +83,7 @@ class StableDiffusionModel:
             lora_clip = load_lora_patches(lora_sd, self.lora_key_map_clip)
 
             if len(lora_unet) == 0 and len(lora_clip) == 0:
-                # 与当前模型完全不匹配（原实现用「未匹配 key 超过 12 个」判断，是启发式）
+                # No match with this model (the old check counted >12 unmatched keys, a heuristic)
                 print(f'LoRA [{lora_filename}] does not match model [{self.filename}], skipped.')
                 continue
 
@@ -253,8 +253,8 @@ def ksampler(model, positive, negative, latent, seed=None, steps=30, cfg=7.0, sa
              scheduler='karras', denoise=1.0, disable_noise=False, start_step=None, last_step=None,
              force_full_denoise=False, callback_function=None,
              previewer_start=None, previewer_end=None, sigmas=None, noise_mean=None, disable_preview=False):
-    # 注意：这里不再有 refiner / refiner_switch 参数。原来它们驱动 sample_hijack 的
-    # 「采样中途换模型」，现代核心没有对应挂载点，已改为 process_diffusion 的原生两遍采样。
+    # No refiner / refiner_switch arguments: they drove sample_hijack's mid-sampling model swap,
+    # which the modern core has no mount point for; process_diffusion samples twice natively now.
 
     if sigmas is not None:
         sigmas = sigmas.clone().to(comfy.model_management.get_torch_device())
@@ -312,14 +312,10 @@ def ksampler(model, positive, negative, latent, seed=None, steps=30, cfg=7.0, sa
 
 
 def warn_if_partially_loaded(model, label=None):
-    """模型被 comfy 部分加载时出声。
+    """Warn when comfy only partially loads the model, so each step streams weights from RAM (~98 s/step).
 
-    显存不够时 `load_models_gpu` 不会报错，只会把一部分权重留在内存里、每步搬上来，
-    于是同一个模型从 ~1.7 秒/步掉到 ~98 秒/步；而且部分加载走 per-op manual_cast，
-    **数值也会变**。这种"只是变慢/悄悄变了"的失效必须显式说出来。
-
-    只能在采样过程中调用：采样一结束 comfy 就把非持久模型卸掉了，
-    那时 loaded_size() 恒为 0，会误报。
+    Values shift too, since partial loads go through per-op manual_cast. Call during sampling only:
+    once sampling ends comfy unloads non-persistent models and loaded_size() reads 0.
     """
     if label is None:
         label = type(model.model).__name__ if hasattr(model, 'model') else 'model'

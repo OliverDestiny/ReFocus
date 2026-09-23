@@ -24,25 +24,7 @@ def align_warp_face(self, landmark, border_mode='constant'):
 
 
 def detect_landmarks_with_threshold(helper, threshold):
-    """按指定置信度阈值抽 5 点 landmark。
-
-    为什么不直接用 helper.get_face_landmarks_5()：facexlib 把那一步的阈值**硬编码成 0.97**
-    （`extras/facexlib/utils/face_restoration_helper.py:139`），那是为人脸修复场景定的值，
-    对动漫风格命中率很低。实测（检测到的张数）：
-
-实测（faces 检测到的张数）：
-        图                0.97  0.6  0.5  0.3  0.2
-        真人-证件照         1     1    1    1    1
-        真人-全身           1     1    1    2    2
-        动漫-全身 A         0     1    1    1    1
-        动漫-全身 B         0     0    0    0    1
-        动漫-大头 x3        0     0    0    0    0
-    真人照片在默认 0.97 下即可检出；动漫是彩票，且大头照在任何阈值下都检不出。
-    crop_image 取置信度最高的一张，所以调低阈值不会改变已能检出图像的裁剪结果。
-
-    所以这里绕过那个函数、直接调检测器，只替换阈值；landmark 的抽取方式与上游保持一致
-    （含 template_3points 分支）。
-    """
+    """Extract 5-point landmarks at the given confidence threshold, bypassing the hardcoded 0.97."""
     with torch.no_grad():
         bboxes = helper.face_det.detect_faces(helper.input_img, threshold)
 
@@ -57,17 +39,8 @@ def detect_landmarks_with_threshold(helper, threshold):
 
 
 def crop_image(img_rgb, threshold=None):
-    """裁出图中最可信的一张脸，供 FaceSwap 的 IP-Adapter 使用。
-
-    threshold 为 None 时沿用 facexlib 的内置阈值（0.97）；给值时按该阈值检测。
-    检测不到时返回原图——这是既有设计，意味着整图（包含头发等非人脸特征）会被送进
-    IP-Adapter，这也是 FaceSwap 在动漫图上表现为「只注入了发色」的原因。
-
-    多尺度重试：RetinaFace 的 anchor 尺度是固定的，脸在画面里占比过大时会超出最大 anchor，
-    反而检不出。实测动漫「大头照」在原尺寸下任何阈值都失败，缩小后能检出（9019 在 0.5、
-    7791 在 0.35）。所以由大到小依次试，第一个有命中的尺度即采用。尺度越小越不可靠，
-    因此优先用大尺度；同一尺度内取置信度最高的那张。
-    """
+    """Crop the most confident face for FaceSwap's IP-Adapter; falls back to the original image.
+    Tries 4 scales large to small: RetinaFace's fixed anchors miss faces that fill too much of the frame."""
     global faceRestoreHelper
 
     ensure_facexlib_models()
@@ -103,7 +76,7 @@ def crop_image(img_rgb, threshold=None):
             found = detect_landmarks_with_threshold(faceRestoreHelper, threshold)
 
         if len(found) > 0:
-            # 检测在缩放图上做，换算回原图坐标（对齐裁剪要用原图）
+            # Detection runs on the scaled image; landmarks are scaled back for the full-size crop
             landmarks = found if scale == 1.0 else [lm / scale for lm in found]
             used_scale = scale
             break

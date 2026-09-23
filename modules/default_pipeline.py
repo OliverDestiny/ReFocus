@@ -55,10 +55,8 @@ def assert_model_integrity():
     if error_message is not None:
         raise NotImplementedError(error_message)
 
-    # base 与 refiner 必须使用同一套噪声调度：refiner 切换只是换模型、不换 sigma 序列，
-    # 两边调度不一致时会从「基座的 50%」跳到「另一条曲线的 50%」，结果是噪声图而不报错。
-    # 用 sigma_max 判断——同为 EPS 的 SDXL 都是 14.6146，而 v_prediction / 零终端 SNR
-    # 模型会差一个量级（实测 silvermoonmix_v40VPred 是 4518.76）。
+    # base and refiner must share one noise schedule: the swap keeps the sigma sequence, so mismatched
+    # schedules jump to another curve's 50% and yield noise with no error (detected via sigma_max).
     base_sampling = model_base.unet_with_lora.model.model_sampling
     if model_refiner.unet_with_lora is not None:
         refiner_sampling = model_refiner.unet_with_lora.model.model_sampling
@@ -261,8 +259,8 @@ def refresh_everything(refiner_model_name, base_model_name, loras,
     final_refiner_unet = model_refiner.unet_with_lora
     final_refiner_vae = model_refiner.vae
 
-    # 把 CFG 钩子（锐度 / adaptive CFG / eps_record）挂到两个 unet 上。
-    # 这替代了原来对 comfy.samplers.sampling_function 的猴子补丁。
+    # Attach the CFG hooks (sharpness / adaptive CFG / eps_record) to both unets; this replaces the
+    # old monkey patch of comfy.samplers.sampling_function.
     if final_unet is not None:
         modules.patch.attach_model_hooks(final_unet)
     if final_refiner_unet is not None and final_refiner_unet is not final_unet:
@@ -293,15 +291,15 @@ def vae_parse(latent):
 @torch.no_grad()
 @torch.inference_mode()
 def calculate_sigmas_all(sampler, model, scheduler, steps):
-    """model 传 ModelPatcher（不是 BaseModel），以便取到被 add_object_patch 替换过的
-    model_sampling —— LCM 模式就是这么改采样方式的，取错会让 sigma 与实际采样不一致。"""
+    """model must be a ModelPatcher, not a BaseModel, so a model_sampling replaced by add_object_patch
+    is visible: LCM mode changes sampling that way, and the wrong one desyncs sigmas from sampling."""
     discard_penultimate_sigma = False
     if sampler in ['dpm_2', 'dpm_2_ancestral']:
         steps += 1
         discard_penultimate_sigma = True
 
-    # 现代 API：calculate_sigmas(model_sampling, scheduler_name, steps)
-    # turbo 由 modules.sample_hijack 注册进核心的 SCHEDULER_HANDLERS。
+    # Modern API: calculate_sigmas(model_sampling, scheduler_name, steps).
+    # turbo is registered into the core SCHEDULER_HANDLERS by modules.sample_hijack.
     sigmas = comfy.samplers.calculate_sigmas(model.get_model_object("model_sampling"), scheduler, steps)
 
     if discard_penultimate_sigma:
@@ -341,13 +339,8 @@ def get_candidate_vae(steps, switch, denoise=1.0, refiner_swap_method='joint'):
 @torch.no_grad()
 @torch.inference_mode()
 def prepare_img2img_latent(pixels, steps, switch, denoise, refiner_swap_method='joint', tiled=False):
-    """把像素编码成图生图用的初始 latent。
-
-    pixels 必须由调用方先缩放好：各调用方的目标尺寸策略不同（vary 夹到 1024~2048、
-    upscale 按 64 对齐后重采样），这一步不在这里统一。
-
-    返回 (initial_latent, candidate_vae, candidate_vae_swap, width, height)，
-    其中 width/height 由 latent 反推，调用方需用它们覆盖自己的尺寸变量。
+    """Encode the caller's pre-scaled pixels into the initial img2img latent; returns (initial_latent,
+    candidate_vae, candidate_vae_swap, width, height), width/height overwriting the caller's size vars.
     """
     candidate_vae, candidate_vae_swap = get_candidate_vae(
         steps=steps,
@@ -367,10 +360,8 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
     target_unet, target_vae, target_refiner_unet, target_refiner_vae, target_clip \
         = final_unet, final_vae, final_refiner_unet, final_refiner_vae, final_clip
 
-    # 'joint' 是旧的「采样中途换 refiner」，它依赖已被删除的 sample_hacked
-    #（旧 samplers.sample 的整份拷贝，而现代核心没有 wrap_model）。
-    # 现在统一走原生两遍采样 'separate'，因此把 'joint' 归一化成它。
-    # 已知差异：两遍采样与旧的中途切换不是逐位相同（见 D4 数值差异实测）。
+    # 'joint' (the old mid-sampling refiner swap) depended on the deleted sample_hacked, so it is
+    # normalized to the native two-pass 'separate'; the two are not bit-identical (see D4 measurements).
     if refiner_swap_method == 'joint':
         refiner_swap_method = 'separate'
 
@@ -400,8 +391,8 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
     else:
         initial_latent = latent
 
-    # 这两个值现在只用于日志与校验：噪声场由现代 sampler 自己按 sigmas 构建，
-    # 不再需要 BrownianTreeNoiseSamplerPatched.global_init 预置一棵共享的树。
+    # These two values are for logging and validation only: the modern sampler builds the noise field
+    # from sigmas itself, so the shared tree from BrownianTreeNoiseSamplerPatched.global_init is gone.
     minmax_sigmas = calculate_sigmas(sampler=sampler_name, scheduler=scheduler_name, model=final_unet, steps=steps, denoise=denoise)
     sigma_min, sigma_max = minmax_sigmas[minmax_sigmas > 0].min(), minmax_sigmas.max()
     sigma_min = float(sigma_min.cpu().numpy())
@@ -410,9 +401,8 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
 
     decoded_latent = None
 
-    # 只有在确实存在「另一个」refiner 时分两遍才有意义。未选 refiner、或用的是合成 refiner
-    # （parameterized inpaint 在 refiner 为 None 时会把基座自己当 refiner）时，分段只是把同一个
-    # 模型在 switch 处切开，还会打印一段误导性的日志。这种情况直接一遍跑完。
+    # Two passes only make sense with a distinct refiner: with none, or with the synthetic one
+    # (parameterized inpaint takes the base as refiner), the split only cuts one model at switch.
     has_distinct_refiner = (refiner_swap_method == 'separate'
                             and target_refiner_unet is not None
                             and target_refiner_unet is not target_unet)

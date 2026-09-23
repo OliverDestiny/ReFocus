@@ -2,28 +2,10 @@
 # Original work Copyright (c) 2023 lllyasviel (Fooocus) & 2024 ehristoforu (DeFooocus).
 # Modified and distributed under the terms of the GNU General Public License v3.0.
 
-"""上游 ComfyUI 里没有随核心搬运进来、但 ReFocus 需要的那几个 op。
+"""Ops ReFocus needs that the vendored core does not carry, ported from upstream nodes.py / comfy_extras/.
 
-`comfy/` 是逐字节的上游拷贝，但上游把「节点实现」放在仓库根的 `nodes.py` 与
-`comfy_extras/` 里，这两处都没搬（它们各自会拖进 comfy_api、folder_paths、
-latent_preview 和一大批无关架构）。ReFocus 实际只用到其中少数几个 op，
-按函数体移植到这里，而不是引入整套节点注册机制。
-
-**换核心 tag 时，本文件是必须重新核对的清单**：上游这些实现曾多次改签名
-（VAEEncodeTiled 现在必须传 overlap、set_cond_hint 多了 vae/extra_concat、
-SDTurboScheduler 改走 get_model_object），逐条对照上游同名类即可。
-
-注意：`vae_encode_tiled` / `vae_decode_tiled` **必须在 `torch.inference_mode()` 内调用**。
-`comfy.utils.tiled_scale_multidim` 带 `@torch.inference_mode()` 装饰器，返回的是 inference
-张量，而 `comfy/sd.py` 的 `encode_tiled_` 会对它做原地累加——在 inference_mode 之外会抛
-"Inplace update to inference tensor outside InferenceMode"。ReFocus 的 `handler` 本身
-就在 `@torch.inference_mode()` 下运行，所以应用路径上没有这个问题。
-
-来源标注：
-  FreeU_V2 / Fourier_filter      <- comfy_extras/nodes_freelunch.py
-  LCM / ModelSamplingDiscrete*   <- comfy_extras/nodes_model_advanced.py
-  SDTurboScheduler               <- comfy_extras/nodes_custom_sampler.py
-  EmptyLatentImage 等 VAE/CN op  <- nodes.py
+Re-check each one against the upstream class of the same name when the core tag changes.
+`vae_encode_tiled` and `vae_decode_tiled` must be called inside `torch.inference_mode()`.
 """
 
 import logging
@@ -35,7 +17,7 @@ import comfy.model_sampling
 
 
 # ---------------------------------------------------------------------------
-# FreeU（来源：comfy_extras/nodes_freelunch.py）
+# FreeU (ported from comfy_extras/nodes_freelunch.py)
 # ---------------------------------------------------------------------------
 
 def Fourier_filter(x, threshold, scale):
@@ -57,7 +39,7 @@ def Fourier_filter(x, threshold, scale):
 
 
 def freeu_patch(model, b1, b2, s1, s2):
-    """FreeU_V2：按通道数缩放 skip 分支，并对 hsp 做傅里叶滤波。返回打了补丁的 model。"""
+    """FreeU_V2: scale skip branches by channel count and Fourier-filter hsp; returns the patched model."""
     model_channels = model.model.model_config.unet_config["model_channels"]
     scale_dict = {model_channels * 4: (b1, s1), model_channels * 2: (b2, s2)}
     on_cpu_devices = {}
@@ -91,8 +73,7 @@ def freeu_patch(model, b1, b2, s1, s2):
 
 
 # ---------------------------------------------------------------------------
-# ModelSamplingDiscrete（来源：comfy_extras/nodes_model_advanced.py）
-# LCM 与 Distilled 上游就定义在那个 extras 文件里，所以一并移植。
+# ModelSamplingDiscrete (ported from comfy_extras/nodes_model_advanced.py, LCM and Distilled included)
 # ---------------------------------------------------------------------------
 
 class LCM(comfy.model_sampling.EPS):
@@ -149,7 +130,7 @@ _SAMPLING_TYPES = {
 
 
 def model_sampling_discrete_patch(model, sampling, zsnr=False):
-    """替换模型的 model_sampling（LCM 模式走 'lcm'）。返回打了补丁的 model。"""
+    """Swap the model's model_sampling (LCM mode uses 'lcm'); returns the patched model."""
     sampling_base, sampling_type = _SAMPLING_TYPES[sampling]
 
     class ModelSamplingAdvanced(sampling_base, sampling_type):
@@ -163,9 +144,8 @@ def model_sampling_discrete_patch(model, sampling, zsnr=False):
 
 
 # ---------------------------------------------------------------------------
-# SDTurboScheduler（来源：comfy_extras/nodes_custom_sampler.py）
-# 参数从「模型」改成「model_sampling」，以便直接注册进 SCHEDULER_HANDLERS
-# （该表的 use_ms=True 约定就是 handler(model_sampling, steps)）。
+# SDTurboScheduler (ported from comfy_extras/nodes_custom_sampler.py)
+# Takes model_sampling rather than a model to match SCHEDULER_HANDLERS' use_ms=True contract.
 # ---------------------------------------------------------------------------
 
 def turbo_sigmas(model_sampling, steps, denoise=1.0):
@@ -177,7 +157,7 @@ def turbo_sigmas(model_sampling, steps, denoise=1.0):
 
 
 # ---------------------------------------------------------------------------
-# Latent / VAE（来源：nodes.py）
+# Latent / VAE (ported from nodes.py)
 # ---------------------------------------------------------------------------
 
 def empty_latent(width, height, batch_size=1):
@@ -198,7 +178,7 @@ def vae_decode(vae, samples):
 
 
 def vae_decode_tiled(vae, samples, tile_size=512, overlap=64):
-    """上游 VAEDecodeTiled 的等价实现（含时间维压缩的适配）。"""
+    """Equivalent of upstream VAEDecodeTiled, including the temporal-compression handling."""
     if tile_size < overlap * 4:
         overlap = tile_size // 4
 
@@ -229,14 +209,14 @@ def vae_encode(vae, pixels):
 
 
 def vae_encode_tiled(vae, pixels, tile_size=512, overlap=64):
-    """上游 VAEEncodeTiled 的等价实现。注意上游这里不缩放 tile 尺寸（由 encode_tiled 自己处理）。"""
+    """Equivalent of upstream VAEEncodeTiled; tile sizes are not scaled here, encode_tiled does that."""
     t = vae.encode_tiled(pixels, tile_x=tile_size, tile_y=tile_size, overlap=overlap,
                          tile_t=64, overlap_t=8)
     return {"samples": t}
 
 
 # ---------------------------------------------------------------------------
-# ControlNet（来源：nodes.py ControlNetApplyAdvanced）
+# ControlNet (ported from nodes.py ControlNetApplyAdvanced)
 # ---------------------------------------------------------------------------
 
 def controlnet_apply_advanced(positive, negative, control_net, image, strength, start_percent, end_percent):
@@ -269,13 +249,12 @@ def controlnet_apply_advanced(positive, negative, control_net, image, strength, 
 
 
 # ---------------------------------------------------------------------------
-# 图像放大（来源：nodes.py ImageUpscaleWithModel）
-# 与 VAE 的 tiled 编解码同理，comfy.utils.tiled_scale 带 @torch.inference_mode()，
-# 所以本函数也必须在 inference_mode 内调用（ReFocus 的 handler 满足）。
+# Image upscale (ported from nodes.py ImageUpscaleWithModel)
+# comfy.utils.tiled_scale is decorated with @torch.inference_mode(), so call this inside inference_mode.
 # ---------------------------------------------------------------------------
 
 def upscale_with_model(upscale_model, image, tile=512, overlap=32):
-    """用放大模型跑分块放大。image 是 BHWC，返回同为 BHWC。"""
+    """Run a tiled upscale with an upscale model; image is BHWC and so is the return value."""
     import comfy.utils
 
     device = comfy.model_management.get_torch_device()

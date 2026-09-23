@@ -2,15 +2,10 @@
 # Original work Copyright (c) 2023 lllyasviel (Fooocus) & 2024 ehristoforu (DeFooocus).
 # Modified and distributed under the terms of the GNU General Public License v3.0.
 
-"""校验 UI 与 worker 之间的参数契约。
+"""Verify the argument contract between the UI (webui.py builds ctrls) and the worker.
 
-UI（webui.py 组装 ctrls）与 worker（async_worker.py 解析 args）靠位置对齐，
-顺序表在 modules/arg_schema.py。本工具是独立入口，用于在任何改动后快速确认两端仍然对齐。
-
-用法（在仓库根目录执行）：
-    python tools/check_arg_contract.py                       # 打印参数表
-    python tools/check_arg_contract.py --verify              # 额外导入 webui 构建 UI 并校验总数
-    python tools/check_arg_contract.py --verify -- --disable-metadata   # '--' 之后转发给应用
+The order table is modules/arg_schema.py; run from the repository root. --verify additionally
+imports webui to build the UI and checks the total, and everything after '--' is forwarded to the app.
 """
 
 import os
@@ -31,26 +26,29 @@ def print_schema():
 
 
 def verify_ui():
-    """导入 webui 构建 UI。webui 的逐组断言在导入期即会触发。"""
+    """Import webui to build the UI; its per-group assertions fire at import time."""
     import modules.arg_schema as arg_schema
 
     try:
         import modules.webui as webui
     except Exception as exc:
-        print(f'FAIL: 导入 webui 失败，参数契约未通过校验：\n  {type(exc).__name__}: {exc}')
+        print(f'FAIL: could not import webui, the contract was not verified: '
+              f'{type(exc).__name__}: {exc}')
         return 1
 
     ctrls = getattr(webui, 'ctrls', None)
     if ctrls is None:
-        print('FAIL: 未能从 webui 取到 ctrls（模块结构可能已变）。')
+        print('FAIL: webui has no ctrls (the module layout may have changed).')
         return 1
 
-    expected = arg_schema.total() + 1  # +1 是 currentTask
+    expected = arg_schema.total() + 1  # +1 for currentTask
     if len(ctrls) != expected:
-        print(f'FAIL: ctrls={len(ctrls)}，期望 {expected}（schema {arg_schema.total()} + currentTask）。')
+        print(f'FAIL: ctrls={len(ctrls)}, expected {expected} '
+              f'(schema {arg_schema.total()} + currentTask).')
         return 1
 
-    print(f'OK: ctrls={len(ctrls)} 与 schema 一致（{arg_schema.total()} 个参数 + currentTask）。')
+    print(f'OK: ctrls={len(ctrls)} matches the schema '
+          f'({arg_schema.total()} parameters + currentTask).')
     return 0
 
 
@@ -62,17 +60,17 @@ def main():
     else:
         tool_args, app_args = argv, []
 
-    # args_manager 在导入时解析 sys.argv，这里只保留要转发给应用的参数
+    # args_manager parses sys.argv at import time; keep only the arguments forwarded to the app
     sys.argv = [sys.argv[0]] + app_args
 
-    print('参数表（modules/arg_schema.py）：')
+    print('Argument table (modules/arg_schema.py):')
     print_schema()
 
     if '--verify' in tool_args:
         print()
         return verify_ui()
 
-    print('\n（加 --verify 可额外导入 webui 校验总数）')
+    print('\n(Add --verify to also import webui and check the total.)')
     return 0
 
 
