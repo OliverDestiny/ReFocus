@@ -138,10 +138,16 @@ If you have a previously generated ReFocus image with embedded parameters, you c
 
 Check the **Advanced** checkbox on the main interface to expand the settings panel on the right.
 
-### Basic Parameters
+The right column has three tabs: **Settings** for everyday options, **Models** for the model pickers,
+and **Advanced** for the parameters that only matter when tuning something specific.
+
+### Basic Parameters (Settings)
 
 - **Steps**: Higher values generally produce better details. 1–10 steps automatically switch to LCM ultra-fast mode.
-- **Width / Height**: Set the output size directly. Each slider has a number box next to it, **Preset** applies one of the saved aspect ratios to both, and **Swap** exchanges them. Sizes snap to multiples of 8; SDXL is trained around one megapixel, so far larger sizes tend to cost time without adding detail.
+- **Width / Height**: Set the output size directly. Each slider has a number box next to it, the **⇄** button exchanges them, and the saved aspect ratios are available as buttons underneath (rows of five) which set both at once. Sizes snap to multiples of 8; SDXL is trained around one megapixel, so far larger sizes tend to cost time without adding detail.
+- **Guidance & Sharpness**: Tick the box to reveal Guidance Scale and Image Sharpness, which are described under Advanced Debug Tools below.
+- **Output Format**: png, jpg or webp.
+- **FreeU**: Tick the box to enable it and reveal its four coefficients (B1, B2, S1, S2). It rescales the UNet's skip features and can add background detail; it applies to the base model only, and it is off by default.
 - **Image Number**: Number of images to generate per batch.
 - **Negative Prompt**: Describe what you do not want to appear in the image.
 - **Seed**: Fixed seeds reproduce the same result; random seeds produce different results each time.

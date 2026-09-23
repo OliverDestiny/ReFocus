@@ -86,18 +86,29 @@ latter, because a renamed key has to keep accepting the old spelling.
 
 ### Where the shared UI parameters live
 
-- The output size is two sliders (width and height, each with a number box), a preset dropdown that
-  applies one of `config.available_aspect_ratios`, and a Swap button. `aspect_ratios_selection` used to
-  be a single radio list, and the two `overwrite_width` / `overwrite_height` sliders in Debug Tools
-  existed only because there was no way to type a size. Step is 8 because the shipped presets include
-  values like 720 and 1080 that divide by 8 but not by 64.
-- FreeU sits in the visible part of the Advanced tab. It was already a normal parameter pair in the
-  argument schema; only the UI location was debug-only. It applies to the base model only.
-- The Debug Tools tab is now down to the parameters that have no normal counterpart: the ADM scalers,
-  adaptive CFG, the refiner swap method and the output flags. Six `overwrite_*` controls were deleted,
-  because Steps is already an exact integer slider, Refiner Switch At expresses the same switch as a
-  fraction, the Vary and Upscale tabs have their own Denoise Strength, and the width/height overwrites
-  are covered by the new resolution control.
+The right column has three tabs and the split is deliberate: **Settings** for what a normal session
+touches, **Models** for the model pickers, and **Advanced** for the parameters that have no normal
+counterpart. There is no developer-mode gate on any of it — the old "Advanced mode" checkbox only
+hid controls that are now simply in the Advanced tab.
+
+- **Settings** holds Steps (with its preset buttons), the output size, the Sampling group, Guidance
+  Scale and Image Sharpness, Output Format, FreeU, the three output flags, and the metadata options.
+  - Guidance/Sharpness and Sampling each sit behind a checkbox that reveals them, so the tab stays
+    short for the common case.
+  - FreeU's checkbox *is* `freeu_enabled`, so ticking it enables FreeU and reveals its four
+    coefficients at once. Its defaults are 1.3 / 1.4 / 0.9 / 0.2, the values upstream ComfyUI's
+    `FreeU_V2` node ships (the FreeU v2 recommendation); FreeU itself stays off by default.
+  - The output size is two sliders, each with a number box, plus a swap button and the presets from
+    `config.available_aspect_ratios` rendered as buttons in rows of five — the same shape as the Steps
+    presets. Step is 8 because the shipped presets include 720 and 1080, which divide by 8 but not by
+    64. `aspect_ratios_selection` used to be a single radio list and the two `overwrite_width` /
+    `overwrite_height` sliders existed only because there was no way to type a size.
+- **Advanced** is the Debug Tools, Control and Inpaint groups: the ADM scalers, adaptive CFG, the
+  refiner swap method, the ControlNet debug switches, the mixing flags, ControlNet softness and the
+  inpaint parameters. Six `overwrite_*` controls were deleted from here, because Steps is already an
+  exact integer slider, Refiner Switch At expresses the same switch as a fraction, the Vary and
+  Upscale tabs have their own Denoise Strength, and the width/height overwrites were replaced by the
+  resolution control.
 
 ### Stack
 
