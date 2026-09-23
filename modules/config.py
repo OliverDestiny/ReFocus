@@ -336,9 +336,14 @@ default_save_metadata_to_images = get_config_item_or_set_default(
 default_metadata_scheme = get_config_item_or_set_default(
     key='default_metadata_scheme',
     default_value=MetadataScheme.REFOCUS.value,
-    # 接受旧值 'fooocus'：这项改名之前写的 config.txt 里就是它，不必为此在启动时报警
-    validator=lambda x: x in [y[1] for y in modules.flags.metadata_scheme if y[1] == x] or x == 'fooocus'
+    # 接受任何能解析出枚举的值，含改名前的旧值 'fooocus'
+    validator=lambda x: MetadataScheme.parse(x) is not None
 )
+# 归一化成当前枚举值：`get_config_item_or_set_default` 会**原样返回**配置里的字符串，
+# 而旧 config.txt 里写的是 'fooocus'；这个字符串会直接成为 webui 里那个 Radio 的 value，
+# 它的 choices 是 ['refocus', 'a1111'] —— Gradio 在**请求期**发现 value 不在 choices 里就抛
+# "Value: 'fooocus' is not in the list of choices"，于是点 Generate 直接失败。
+default_metadata_scheme = MetadataScheme.parse(default_metadata_scheme).value
 metadata_created_by = get_config_item_or_set_default(
     key='metadata_created_by',
     default_value='',

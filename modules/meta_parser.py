@@ -100,8 +100,9 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
     if res is not None:
         try:
             width, height = eval(res)
-            results.append(int(width))
-            results.append(int(height))
+            # 夹到滑条范围：超出范围的值 Gradio 会在请求期拒绝（和 choices 同一类问题）
+            results.append(min(max(int(width), 512), 2048))
+            results.append(min(max(int(height), 512), 2048))
         except:
             results.append(gr.update())
             results.append(gr.update())
@@ -140,9 +141,9 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
         results.append(gr.update())
         results.append(gr.update())
 
-    # 16. refiner_swap_method (str)
+    # 16. refiner_swap_method (str) —— 不在控件 choices 里就保持当前值
     refiner_swap = get_value('refiner_swap_method', 'Refiner Swap Method', flags.refiner_swap_method)
-    results.append(refiner_swap if isinstance(refiner_swap, str) else gr.update())
+    results.append(refiner_swap if refiner_swap in ['joint', 'separate', 'vae'] else gr.update())
 
     # 17. adaptive_cfg (float)
     adaptive = get_value('adaptive_cfg', 'CFG Mimicking from TSNR', modules.config.default_cfg_tsnr)
@@ -151,13 +152,14 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
     except:
         results.append(gr.update())
 
-    # 18. base_model (str)
+    # 18. base_model (str) —— 旧图里的模型名可能已经被改名/删除，不在列表里就保持当前值，
+    # 否则会作为「不在 choices 里的 value」写进 Dropdown，在请求期把应用打挂。
     base = get_value('base_model', 'Base Model', '')
-    results.append(base if isinstance(base, str) else gr.update())
+    results.append(base if base in modules.config.model_filenames else gr.update())
 
     # 19. refiner_model (str)
     refiner = get_value('refiner_model', 'Refiner Model', 'None')
-    results.append(refiner if isinstance(refiner, str) else gr.update())
+    results.append(refiner if refiner in ['None'] + modules.config.model_filenames else gr.update())
 
     # 20. refiner_switch (float)
     refiner_sw = get_value('refiner_switch', 'Refiner Switch', modules.config.default_refiner_switch)
@@ -168,11 +170,11 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
 
     # 21. sampler_name (str)
     sampler = get_value('sampler', 'Sampler', modules.config.default_sampler)
-    results.append(sampler if isinstance(sampler, str) else gr.update())
+    results.append(sampler if sampler in flags.sampler_list else gr.update())
 
     # 22. scheduler_name (str)
     scheduler = get_value('scheduler', 'Scheduler', modules.config.default_scheduler)
-    results.append(scheduler if isinstance(scheduler, str) else gr.update())
+    results.append(scheduler if scheduler in flags.scheduler_list else gr.update())
 
     # 23. seed_random (bool)
     seed_random_val = get_value('seed_random', 'Randomize seed', True)
@@ -223,8 +225,13 @@ def load_parameter_button_click(raw_metadata: dict | str, is_generating: bool):
             try:
                 n, w = lora_val.split(' : ')
                 w = float(w)
-                results.append(n)
-                results.append(w)
+                # 同理：旧图里的 LoRA 可能已被删除，不在列表里就回落到 None
+                if n in ['None'] + modules.config.lora_filenames:
+                    results.append(n)
+                    results.append(w)
+                else:
+                    results.append('None')
+                    results.append(1.0)
             except:
                 results.append('None')
                 results.append(1.0)
@@ -665,16 +672,14 @@ def read_info_from_image(filepath) -> tuple[str | None, MetadataScheme | None]:
         if is_json(parameters):
             parameters = json.loads(parameters)
 
-    try:
-        metadata_scheme = MetadataScheme.parse(metadata_scheme)
-    except ValueError:
-        metadata_scheme = None
-
-        # broad fallback
+    metadata_scheme = MetadataScheme.parse(metadata_scheme)
+    if metadata_scheme is None:
+        # 图里没有 scheme 标记（纯 A1111 的 PNG，或 A1111 的 JPEG/WebP 没有 MakerNote）：
+        # 按参数形态推断。注意这里**不能**靠 parse 抛异常来触发 —— parse 内部吞掉 ValueError
+        # 并返回 None，用 try/except 包住它是死代码（曾经就是这么写的）。
         if isinstance(parameters, dict):
             metadata_scheme = MetadataScheme.REFOCUS
-
-        if isinstance(parameters, str):
+        elif isinstance(parameters, str):
             metadata_scheme = MetadataScheme.A1111
 
     return parameters, metadata_scheme

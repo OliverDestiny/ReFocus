@@ -59,6 +59,27 @@ PHOTOPEA_IFRAME_LOADED_EVENT = "onPhotopeaLoaded"
 def get_photopea_url_params():
     return "#%7B%22resources%22:%5B%22data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIAAQMAAADOtka5AAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAADZJREFUeJztwQEBAAAAgiD/r25IQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfBuCAAAB0niJ8AAAAABJRU5ErkJggg==%22%5D%7D"
 
+def first_valid(value, choices, default=None):
+    """把配置/CLI 来的值收敛到控件的 choices 里。
+
+    Gradio 允许把不在 choices 里的值当初始值传进去，但**在请求期**会抛
+    "Value: X is not in the list of choices" —— 于是点 Generate 直接失败，而不是启动时报错。
+    模型文件被改名/删除、config.txt 里残留旧名字、--preset 指向不存在的预设，都会触发它。
+    这里按 choices → default → 第一个可用项的顺序回落。
+    """
+    values = [c[1] if isinstance(c, (tuple, list)) else c for c in choices]
+    if value in values:
+        return value
+    if default is not None and default in values:
+        return default
+    if len(values) > 0:
+        if value not in (None, '', 'None'):
+            print(f'[ReFocus] Warning: {value!r} is not among the available choices '
+                  f'{values[:4]}{" ..." if len(values) > 4 else ""}; using {values[0]!r} instead.')
+        return values[0]
+    return value
+
+
 def add_ctrl_group(ctrls, group_name, components):
     """按 modules/arg_schema.py 的分组登记 worker 参数。
 
@@ -732,10 +753,12 @@ with gradio_root:
                         preset_25 = gr.Button("25 (Speed)", size="sm")
                         preset_10 = gr.Button("10 (Extreme)", size="sm")
                         if not args_manager.args.disable_preset_selection:
-                            preset_selection = gr.Dropdown(label='Preset',
-                                                        choices=modules.config.available_presets,
-                                                        value=args_manager.args.preset if args_manager.args.preset else "initial",
-                                                        interactive=True)
+                            preset_selection = gr.Dropdown(
+                                label='Preset',
+                                choices=modules.config.available_presets,
+                                value=first_valid(args_manager.args.preset if args_manager.args.preset else "initial",
+                                                  modules.config.available_presets, "initial"),
+                                interactive=True)
                     preset_45.click(lambda: gr.update(value=45), outputs=steps_slider)
                     preset_25.click(lambda: gr.update(value=25), outputs=steps_slider)
                     preset_10.click(lambda: gr.update(value=10), outputs=steps_slider)
@@ -830,8 +853,14 @@ with gradio_root:
             with gr.Tab(label='Models'):
                 with gr.Group():
                     with gr.Row():
-                        base_model = gr.Dropdown(label='Base Model (SDXL only)', choices=modules.config.model_filenames, value=modules.config.default_base_model_name, show_label=True)
-                        refiner_model = gr.Dropdown(label='Refiner (SDXL or SD 1.5)', choices=['None'] + modules.config.model_filenames, value=modules.config.default_refiner_model_name, show_label=True)
+                        base_model = gr.Dropdown(label='Base Model (SDXL only)', choices=modules.config.model_filenames,
+                                                 value=first_valid(modules.config.default_base_model_name,
+                                                                   modules.config.model_filenames), show_label=True)
+                        refiner_model = gr.Dropdown(label='Refiner (SDXL or SD 1.5)',
+                                                    choices=['None'] + modules.config.model_filenames,
+                                                    value=first_valid(modules.config.default_refiner_model_name,
+                                                                      ['None'] + modules.config.model_filenames,
+                                                                      'None'), show_label=True)
 
                     refiner_switch = gr.Slider(label='Refiner Switch At', minimum=0.1, maximum=1.0, step=0.0001,
                                                info='Use 0.4 for SD1.5 realistic models; '
@@ -852,7 +881,9 @@ with gradio_root:
                     for i, (n, v) in enumerate(modules.config.default_loras):
                         with gr.Row():
                             lora_model = gr.Dropdown(label=f'LoRA {i + 1}',
-                                                     choices=['None'] + modules.config.lora_filenames, value=n)
+                                                     choices=['None'] + modules.config.lora_filenames,
+                                                     value=first_valid(n, ['None'] + modules.config.lora_filenames,
+                                                                       'None'))
                             lora_weight = gr.Slider(label='Weight', minimum=-2, maximum=2, step=0.01, value=v,
                                                     elem_classes='lora_weight')
                             lora_ctrls += [lora_model, lora_weight]
@@ -925,7 +956,9 @@ with gradio_root:
                         if not args_manager.args.disable_metadata:
                             save_metadata_to_images = gr.Checkbox(label='Save Metadata to Images', value=modules.config.default_save_metadata_to_images,
                                                                   info='Adds parameters to generated images allowing manual regeneration.')
-                            metadata_scheme = gr.Radio(label='Metadata Scheme', choices=flags.metadata_scheme, value=modules.config.default_metadata_scheme,
+                            metadata_scheme = gr.Radio(label='Metadata Scheme', choices=flags.metadata_scheme,
+                                                       value=first_valid(modules.config.default_metadata_scheme,
+                                                                         [y[1] for y in flags.metadata_scheme]),
                                                        info='Image Prompt parameters are not included. Use a1111 for compatibility with Civitai.',
                                                        visible=modules.config.default_save_metadata_to_images)
 

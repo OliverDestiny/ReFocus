@@ -68,6 +68,22 @@ Both preprocessors and their parameters moved here from the old global Debug Too
 thresholds belong to PyraCanny and the face detection confidence to FaceSwap, and they are now per slot
 rather than per run.
 
+### Widget values must be members of their choices
+
+Gradio accepts an initial `value` that is not in the widget's `choices`, but it rejects it **at request
+time** with `Value: X is not in the list of choices` — which means the app starts fine and then every
+Generate click fails. Three things feed such values in: a `config.txt` key whose validator is weaker
+than the widget's choice list (a renamed or deleted model file, a stale preset name from `--preset`),
+and metadata imported from an older image naming a sampler or model that no longer exists.
+
+Therefore: `webui.first_valid(value, choices, default)` coerces initial values into the choice list and
+prints what it substituted, and `meta_parser.load_parameter_button_click` checks membership for
+`sampler`, `scheduler`, `refiner_swap_method`, `base_model`, `refiner_model` and the LoRA names (keeping
+the widget's current value when a name is gone instead of passing it on), and clamps the resolution
+into the sliders' range. When a config key feeds a widget, its validator must be at least as strict as
+that widget's `choices`, or the value has to be normalized before use — the metadata scheme does the
+latter, because a renamed key has to keep accepting the old spelling.
+
 ### Where the shared UI parameters live
 
 - The output size is two sliders (width and height, each with a number box), a preset dropdown that
@@ -147,6 +163,13 @@ Two rules follow from that, and both matter:
    not vendored because they drag in `comfy_api`, `folder_paths` and a large number of unrelated
    architectures), and re-run the acceptance checks. Keeping a diffable copy is what makes that
    mechanical instead of a re-derivation.
+
+`node_helpers.py` sits next to `comfy/` at the repository root and is **not** part of ReFocus: it is a
+top-level module that `comfy/hooks.py` imports by bare name (`from node_helpers import
+conditioning_set_values`), and `comfy.hooks` is imported at module level by `model_patcher`, `samplers`
+and `sd`, so it loads on every run. It cannot move into `modules/` without editing `comfy/`, and moving
+`comfy/` itself would require putting `modules/` on `sys.path` — which would shadow the stdlib `html`
+(with `modules/html.py`) and the pinned `rembg` package (with `modules/rembg.py`). Both stay at the root.
 
 Two pip packages are required by the core and are pinned exactly in `requirements.txt`:
 `comfy-kitchen` (imported unconditionally by `comfy/ldm/modules/attention.py` and
