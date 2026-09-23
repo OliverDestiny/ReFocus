@@ -100,6 +100,19 @@ progress::after {
   overflow: auto !important;
 }
 
+/* Resolution presets: the theme gives every button a min-width, which wraps four of them
+   into two fat columns; zero it and shrink the text so four fit one row. */
+.preset_row button {
+  min-width: 0 !important;
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+}
+
+.preset_row button span {
+  font-size: 12px !important;
+  white-space: nowrap !important;
+}
+
 .aspect_ratios label {
     width: 140px !important;
 }

@@ -22,7 +22,8 @@ aio_root = os.path.join(prompt_helper_root, "sd-webui-prompt-all-in-one")
 sys.path.insert(0, prompt_helper_root)
 
 host = args.listen or "0.0.0.0"
-port = args.port or int(os.environ.get("GRADIO_SERVER_PORT", "12345"))
+# Port comes from modules/args_manager (ReFocus default 12345, --port to change it).
+port = args.port
 
 app = FastAPI()
 

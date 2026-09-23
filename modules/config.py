@@ -292,12 +292,11 @@ embeddings_downloads = get_config_item_or_set_default(
 )
 available_aspect_ratios = get_config_item_or_set_default(
     key='available_aspect_ratios',
+    # Short side >= 1024 (SDXL's native scale) and the 1:1 default; sorted tall to wide.
     default_value=[
-        '704*1408', '704*1344', '768*1344', '768*1280', '832*1216', '832*1152',
-        '896*1152', '896*1088', '960*1088', '960*1024', '1024*1024', '1024*960',
-        '1088*960', '1088*896', '1152*896', '1152*832', '1216*832', '1280*768',
-        '1344*768', '1344*704', '1408*704', '1472*704', '1536*640', '1600*640',
-        '1664*576', '1728*576'
+        '1152*2048', '1080*1920', '1024*1536', '1536*2048',
+        '1024*1024',
+        '2048*1536', '1536*1024', '1920*1080'
     ],
     validator=lambda x: isinstance(x, list) and all('*' in v for v in x) and len(x) > 1
 )
@@ -308,7 +307,7 @@ default_steps = get_config_item_or_set_default(
 )
 default_aspect_ratio = get_config_item_or_set_default(
     key='default_aspect_ratio',
-    default_value='1152*896' if '1152*896' in available_aspect_ratios else available_aspect_ratios[0],
+    default_value='1024*1536' if '1024*1536' in available_aspect_ratios else available_aspect_ratios[0],
     validator=lambda x: x in available_aspect_ratios
 )
 default_inpaint_engine_version = get_config_item_or_set_default(
@@ -336,13 +335,11 @@ default_save_metadata_to_images = get_config_item_or_set_default(
 default_metadata_scheme = get_config_item_or_set_default(
     key='default_metadata_scheme',
     default_value=MetadataScheme.REFOCUS.value,
-    # 接受任何能解析出枚举的值，含改名前的旧值 'fooocus'
+    # Accepts any value the enum can parse, including the pre-rename 'fooocus'
     validator=lambda x: MetadataScheme.parse(x) is not None
 )
-# 归一化成当前枚举值：`get_config_item_or_set_default` 会**原样返回**配置里的字符串，
-# 而旧 config.txt 里写的是 'fooocus'；这个字符串会直接成为 webui 里那个 Radio 的 value，
-# 它的 choices 是 ['refocus', 'a1111'] —— Gradio 在**请求期**发现 value 不在 choices 里就抛
-# "Value: 'fooocus' is not in the list of choices"，于是点 Generate 直接失败。
+# Normalize to the current enum value: the raw config string can still be the pre-rename 'fooocus',
+# which Gradio rejects at request time (README_DEV: "Widget values must be members of their choices").
 default_metadata_scheme = MetadataScheme.parse(default_metadata_scheme).value
 metadata_created_by = get_config_item_or_set_default(
     key='metadata_created_by',
@@ -357,9 +354,8 @@ default_black_out_nsfw = get_config_item_or_set_default(
     default_value=False,
     validator=lambda x: isinstance(x, bool)
 )
-# FreeU（只作用于 base 模型）。这四个默认值取上游 ComfyUI 的 FreeU_V2 节点默认
-# （comfy_extras/nodes_freelunch.py: b1=1.3, b2=1.4, s1=0.9, s2=0.2，即 FreeU-v2 论文的推荐值），
-# 而不是 Fooocus 那套很保守的 1.01/1.02/0.99/0.95。
+# FreeU (base model only) defaults come from upstream ComfyUI's FreeU_V2 node; see README_DEV
+# "Where the shared UI parameters live" for the values and why Fooocus's set was not used.
 default_freeu_enabled = get_config_item_or_set_default(
     key='default_freeu_enabled',
     default_value=False,
@@ -385,18 +381,8 @@ default_freeu_s2 = get_config_item_or_set_default(
     default_value=0.2,
     validator=lambda x: isinstance(x, numbers.Number)
 )
-# FaceSwap 的人脸检测置信度阈值。facexlib 内部把这一步硬编码成 0.97：
-# 真实照片在 0.97 下本来就正常，动漫风格则命中率很低，且部分构图（大头照）任何阈值都检不出。
-# 默认 0.5 是为了在不影响真人照片的前提下多覆盖一些动漫图。
-# 实测（faces 检测到的张数）：
-# 图                0.97  0.6  0.5  0.3  0.2
-# 真人-证件照         1     1    1    1    1
-# 真人-全身           1     1    1    2    2
-# 动漫-全身 A         0     1    1    1    1
-# 动漫-全身 B         0     0    0    0    1
-# 动漫-大头 x3        0     0    0    0    0
-# 真人照片在默认 0.97 下即可检出；动漫是彩票，且大头照在任何阈值下都检不出。
-# crop_image 取置信度最高的一张，所以调低阈值不会改变已能检出图像的裁剪结果。
+# Face detection confidence for FaceSwap. facexlib hardcodes this step at 0.97, which misses most
+# anime art; 0.5 keeps real photos working. Measurements: see .zcode/code-comments/config.py.md.
 default_face_detection_threshold = get_config_item_or_set_default(
     key='default_face_detection_threshold',
     default_value=0.5,
@@ -404,7 +390,7 @@ default_face_detection_threshold = get_config_item_or_set_default(
 )
 default_rembg_model = get_config_item_or_set_default(
     key='default_rembg_model',
-    default_value='u2net',  # 保持与 rembg 库原生的默认行为一致
+    default_value='u2net',  # matches the rembg library's own default
     validator=lambda x: x in modules.flags.MASK_MODEL_CHOICES
 )
 default_inpaint_mask_model = get_config_item_or_set_default(

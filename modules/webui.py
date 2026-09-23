@@ -19,7 +19,7 @@ from modules.private_logger import get_current_html_path
 from modules.localization import localization_js
 from modules.util import is_json
 
-# ========== 读取自定义 CSS/JS 并注入 ==========
+# ========== Read and inject custom CSS/JS ==========
 def get_custom_head():
     css_path = os.path.join(os.path.dirname(__file__), "css", "style.css")
     js_path = os.path.join(os.path.dirname(__file__), "javascript", "script.js")
@@ -36,7 +36,7 @@ def get_custom_head():
         with open(js_path, "r", encoding="utf-8") as f:
             head += f"<script>{f.read()}</script>"
 
-    # 其他必需的 JS 文件（可按需添加，此处仅作示例）
+    # Other required JS files (add more here as needed)
     for js_file in ["contextMenus.js", "zoom.js", "edit-attention.js", "viewer.js", "imageviewer.js"]:
         js_file_path = os.path.join(os.path.dirname(__file__), "javascript", js_file)
         if os.path.exists(js_file_path):
@@ -48,7 +48,7 @@ def get_custom_head():
 
     return head
 
-# ========== 常量 ==========
+# ========== Constants ==========
 PROMPT_HELPER_PORT = 17860
 PHOTOPEA_MAIN_URL = "https://www.photopea.com/"
 PHOTOPEA_IFRAME_ID = "webui-photopea-iframe"
@@ -60,13 +60,8 @@ def get_photopea_url_params():
     return "#%7B%22resources%22:%5B%22data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIAAQMAAADOtka5AAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAADZJREFUeJztwQEBAAAAgiD/r25IQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfBuCAAAB0niJ8AAAAABJRU5ErkJggg==%22%5D%7D"
 
 def first_valid(value, choices, default=None):
-    """把配置/CLI 来的值收敛到控件的 choices 里。
-
-    Gradio 允许把不在 choices 里的值当初始值传进去，但**在请求期**会抛
-    "Value: X is not in the list of choices" —— 于是点 Generate 直接失败，而不是启动时报错。
-    模型文件被改名/删除、config.txt 里残留旧名字、--preset 指向不存在的预设，都会触发它。
-    这里按 choices → default → 第一个可用项的顺序回落。
-    """
+    """Coerce a config/CLI value into the widget's choices; falls back choices -> default -> first.
+    Contract and failure mode: README_DEV, "Widget values must be members of their choices"."""
     values = [c[1] if isinstance(c, (tuple, list)) else c for c in choices]
     if value in values:
         return value
@@ -81,11 +76,8 @@ def first_valid(value, choices, default=None):
 
 
 def add_ctrl_group(ctrls, group_name, components):
-    """按 modules/arg_schema.py 的分组登记 worker 参数。
-
-    UI 与 worker 靠位置对齐，顺序表在 arg_schema 里。长度不符时立即报错，
-    避免后续所有参数静默错位（症状是"某个设置莫名不生效"）。
-    """
+    """Register worker parameters by group, per arg_schema.py.
+    A length mismatch raises here rather than silently shifting all later arguments (positional contract)."""
     expected = len(arg_schema.group(group_name).args)
     if len(components) != expected:
         raise RuntimeError(
@@ -141,9 +133,8 @@ def generate_clicked(task):
         time.sleep(0.01)
 
         # ---- defending detection: worker stopped but no waiting events ----
-        # 还要确认这个任务已经不在队列里：刚提交时 processing 仍是 False，而 worker 可能正在
-        # 收尾上一个任务（handler 之后还要 prepare_text_encoder，SDXL 上大约 1 秒），
-        # 这时直接判定「worker 已停」会把刚提交的任务丢掉——不报错，只是这次生成毫无反应。
+        # Also require the task to be gone from the queue: right after submission processing is
+        # still False, and a "worker stopped" verdict would silently drop the new task.
         if (hasattr(task, 'processing') and not task.processing and len(task.yields) == 0
                 and task not in worker.async_tasks):
             # let finish event first reach window (avoid competing conditions)
@@ -159,10 +150,8 @@ def generate_clicked(task):
                 break
 
         # ---- overtime detection based on idle time ----
-        # 「没有新 yield」不等于「卡死」：采样中的一步就可能远超 60 秒（显存不够时 comfy 会把模型
-        # 部分加载、每步从内存搬权重）。这时若强退，界面会显示成"生成结束"、Stop/Skip 按钮消失，
-        # 而 worker 还在跑 —— 用户看到的就是「Stop/Skip 失灵」。所以 worker 仍在处理中就继续等，
-        # 只在一个明显超过任何合理单步耗时的上限之后才兜底退出。
+        # No new yield is not a stall: a single step can exceed 60s when VRAM is short, so the
+        # limit stays at 1800s while the worker processes and only 60s when it does not.
         idle = time.perf_counter() - last_activity_time
         still_processing = bool(getattr(task, 'processing', False))
         idle_limit = 1800 if still_processing else 60
@@ -452,14 +441,14 @@ with gradio_root:
                                     inputs=[uov_advanced],
                                     outputs=[uov_denoise_upscale, uov_denoise_state]
                                 )
-                                # Vary Custom Slider 值变化时更新 State
+                                # Update State when the Vary Custom Slider value changes
                                 uov_denoise_vary.input(
                                     lambda val: gr.update(value=val),
                                     inputs=[uov_denoise_vary],
                                     outputs=[uov_denoise_state]
                                 )
 
-                                # Upscale Slider 值变化时更新 State
+                                # Update State when the Upscale Slider value changes
                                 uov_denoise_upscale.input(
                                     lambda val: gr.update(value=val),
                                     inputs=[uov_denoise_upscale],
@@ -497,7 +486,7 @@ with gradio_root:
                                 gr.HTML('<a href="https://github.com/lllyasviel/Fooocus/discussions/390" target="_blank">\U0001F4D4 Document</a>')
                     with gr.TabItem(label='Image Prompt') as ip_tab:
                         def build_param_widget(spec):
-                            """按 registry 的 ParamSpec 生成控件；新增类型只要加声明，这里不用改。"""
+                            """Build a widget from a registry ParamSpec; new types need no change here."""
                             if spec.kind == 'checkbox':
                                 return gr.Checkbox(label=spec.label, value=bool(spec.default), info=spec.info)
                             if spec.kind == 'dropdown':
@@ -507,7 +496,7 @@ with gradio_root:
                                              step=spec.step, value=spec.default, info=spec.info)
 
                         param_specs = controlnet_registry.param_union()
-                        ip_param_matrix = []      # 每槽一组控件，顺序与 param_specs 一致
+                        ip_param_matrix = []      # one widget group per slot, in param_specs order
                         ip_type_widgets = []
                         ip_param_states = []
                         with gr.Row():
@@ -521,7 +510,7 @@ with gradio_root:
                                         with gr.Row():
                                             default_end, default_weight = controlnet_registry.default_parameters(controlnet_registry.DEFAULT_TYPE)
 
-                                            # Start 默认 0：与之前写死的初始值一致，默认行为不变
+                                            # Start default 0, matching the previously hardcoded value
                                             ip_start = gr.Slider(label='Start At', minimum=0.0, maximum=1.0, step=0.001, value=0.0, buttons=[])
                                             ip_ctrls.append(ip_start)
 
@@ -535,7 +524,7 @@ with gradio_root:
                                         ip_ctrls.append(ip_type)
                                         ip_type_widgets.append(ip_type)
 
-                                        # 类型自己的参数：按声明生成控件，取值打包成一个 JSON 走单个契约参数
+                                        # One widget per spec; all type params travel as one JSON argument
                                         widgets, cols = [], {}
                                         for spec in param_specs:
                                             with gr.Column(visible=False) as param_col:
@@ -559,9 +548,9 @@ with gradio_root:
                                     ip_ad_cols.append(ad_col)
 
                         def collect_cn_params(*values):
-                            """把每槽选中类型的参数收成一个 JSON。
+                            """Pack each slot's selected-type parameters into one JSON string.
 
-                            必须排在 get_task 之前：worker 从 cn_params_{i} 里读类型参数。
+                            Must run before get_task: the worker reads type parameters from cn_params_{i}.
                             """
                             n_types = len(ip_type_widgets)
                             types = values[:n_types]
@@ -712,8 +701,8 @@ with gradio_root:
                                                     outputs=[metadata_json, metadata_import_button],
                                                     queue=False, show_progress=True)
 
-                        # 图片被移除（X）时要一并清空下方显示并禁用 Apply。
-                        # 否则残留的 JSON 会留在界面上，而 Apply 读到的图片已是 None，直接报错。
+                        # Removing the image (X) must also clear the display and disable Apply:
+                        # a leftover JSON would remain on screen while Apply reads image=None and errors.
                         metadata_input_image.clear(
                             lambda: ({}, gr.update(interactive=False)),
                             outputs=[metadata_json, metadata_import_button],
@@ -740,34 +729,34 @@ with gradio_root:
 
         with gr.Column(scale=1, visible=modules.config.default_advanced_checkbox) as advanced_column:
             with gr.Tab(label='Settings'):
-                with gr.Row():
-                    with gr.Row():
-                        steps_slider = gr.Slider(
-                            minimum=1, maximum=50, step=1,
-                            value=modules.config.default_steps if hasattr(modules.config, 'default_steps') else 25,
-                            label="Steps",
-                            elem_id="steps_slider"
-                        )
-                    with gr.Row():
-                        preset_45 = gr.Button("45 (Quality)", size="sm")
-                        preset_25 = gr.Button("25 (Speed)", size="sm")
-                        preset_10 = gr.Button("10 (Extreme)", size="sm")
-                        if not args_manager.args.disable_preset_selection:
-                            preset_selection = gr.Dropdown(
-                                label='Preset',
-                                choices=modules.config.available_presets,
-                                value=first_valid(args_manager.args.preset if args_manager.args.preset else "initial",
-                                                  modules.config.available_presets, "initial"),
-                                interactive=True)
-                    preset_45.click(lambda: gr.update(value=45), outputs=steps_slider)
-                    preset_25.click(lambda: gr.update(value=25), outputs=steps_slider)
-                    preset_10.click(lambda: gr.update(value=10), outputs=steps_slider)
+                # Ordered by how often a normal session touches a control: most used at the top.
+                # Steps and its three presets share a row with equal_height, so the buttons stand
+                # at the slider's height instead of floating half a row above it. The preset labels
+                # are numbers only: "45 (Quality)" does not fit three of them next to the slider.
+                with gr.Row(equal_height=True):
+                    steps_slider = gr.Slider(
+                        minimum=1, maximum=50, step=1,
+                        value=modules.config.default_steps if hasattr(modules.config, 'default_steps') else 25,
+                        label="Steps",
+                        elem_id="steps_slider",
+                        scale=4
+                    )
+                    preset_45 = gr.Button("45", size="sm", scale=0, min_width=52,
+                                          elem_id='steps_preset_45')
+                    preset_25 = gr.Button("25", size="sm", scale=0, min_width=52,
+                                          elem_id='steps_preset_25')
+                    preset_10 = gr.Button("10", size="sm", scale=0, min_width=52,
+                                          elem_id='steps_preset_10')
 
-                # 分辨率：拉条自带数字输入框（与步数同一种形态），预设按 Steps 的做法排成按钮，
-                # 每行 5 个；预设表来自 config.available_aspect_ratios。
+                preset_45.click(lambda: gr.update(value=45), outputs=steps_slider)
+                preset_25.click(lambda: gr.update(value=25), outputs=steps_slider)
+                preset_10.click(lambda: gr.update(value=10), outputs=steps_slider)
+
+                # Size: the sliders carry number boxes and the swap button flips them; the presets
+                # are buttons laid out four to a row, which is what fits this column.
                 _default_w, _default_h = (int(v) for v in modules.config.default_aspect_ratio
                                           .replace('×', ' ').split(' ')[:2])
-                with gr.Row():
+                with gr.Row(equal_height=True):
                     resolution_width = gr.Slider(label='Width', minimum=512, maximum=2048, step=8,
                                                  value=_default_w, elem_id='resolution_width')
                     resolution_height = gr.Slider(label='Height', minimum=512, maximum=2048, step=8,
@@ -775,17 +764,24 @@ with gradio_root:
                     resolution_swap = gr.Button('\u21c4', size='sm', scale=0, min_width=48)
 
                 def make_resolution_preset_clicked(preset):
-                    # preset 必须绑进闭包，否则循环变量会让所有按钮都套用最后一个预设
+                    # preset must be bound into the closure, or every button applies the last one
                     def clicked():
                         w, h = (int(v) for v in preset.replace('×', ' ').split(' ')[:2])
                         return gr.update(value=w), gr.update(value=h)
                     return clicked
 
-                _resolution_presets = modules.config.available_aspect_ratios
-                for _row_start in range(0, len(_resolution_presets), 5):
-                    with gr.Row():
-                        for _preset in _resolution_presets[_row_start:_row_start + 5]:
-                            _preset_button = gr.Button(_preset, size='sm')
+                _resolution_presets = list(modules.config.available_aspect_ratios)
+
+                def _preset_label(preset):
+                    # Drop the "(9:16)" suffix: four buttons per row only fit the size itself.
+                    return preset.split(' ')[0]
+
+                for _row_start in range(0, len(_resolution_presets), 4):
+                    # preset_row drops the theme's per-button min-width, which is what pushed these
+                    # into two fat columns; with it they fit four to a row.
+                    with gr.Row(equal_height=True, elem_classes='preset_row'):
+                        for _preset in _resolution_presets[_row_start:_row_start + 4]:
+                            _preset_button = gr.Button(_preset_label(_preset), size='sm', min_width=0)
                             _preset_button.click(make_resolution_preset_clicked(_preset),
                                                  outputs=[resolution_width, resolution_height],
                                                  queue=False, show_progress=False)
@@ -796,6 +792,23 @@ with gradio_root:
                 resolution_swap.click(resolution_swap_change, inputs=[resolution_width, resolution_height],
                                       outputs=[resolution_width, resolution_height],
                                       queue=False, show_progress=False)
+
+                # Collapsed by default: most sessions leave it empty, and the label carries the
+                # heading now, so the textbox itself needs no label.
+                with gr.Accordion(label='Negative Prompt', open=False):
+                    negative_prompt = gr.Textbox(label='Negative Prompt', show_label=False,
+                                                 placeholder="Type prompt here.",
+                                                 info='Describing what you do not want to see.', lines=2,
+                                                 elem_id='negative_prompt',
+                                                 value=modules.config.default_prompt_negative)
+
+                if not args_manager.args.disable_preset_selection:
+                    preset_selection = gr.Dropdown(
+                        label='Preset',
+                        choices=modules.config.available_presets,
+                        value=first_valid(args_manager.args.preset if args_manager.args.preset else "initial",
+                                          modules.config.available_presets, "initial"),
+                        interactive=True)
 
                 with gr.Column():
                     sampling_apply = gr.Checkbox(label="Sampling", value=False)
@@ -812,23 +825,32 @@ with gradio_root:
                     api_name=False,
                 )
 
-                # Guidance / Sharpness：默认收起，勾选后展开（与 Sampling 同一种模式）
-                guidance_apply = gr.Checkbox(label="Guidance & Sharpness", value=False)
-                with gr.Column(visible=False) as guidance_tools:
-                    guidance_scale = gr.Slider(label='Guidance Scale', minimum=1.0, maximum=30.0, step=0.01,
-                                               value=modules.config.default_cfg_scale,
-                                               info='Higher value means style is cleaner, vivider, and more artistic.')
-                    sharpness = gr.Slider(label='Image Sharpness', minimum=0.0, maximum=30.0, step=0.001,
-                                          value=modules.config.default_sample_sharpness,
-                                          info='Higher value means image and texture are sharper.')
-                guidance_apply.change(fn=lambda x: gr.update(visible=x), inputs=guidance_apply,
-                                      outputs=guidance_tools, queue=False, api_name=False)
+                with gr.Row(equal_height=True):
+                    seed_random = gr.Checkbox(label='Randomize seed', value=True, scale=0, min_width=170)
+                    image_seed = gr.Textbox(label='Seed', value=0, max_lines=1, visible=False, scale=2)
 
-                output_format = gr.Radio(label='Output Format',
-                                         choices=modules.flags.output_formats,
-                                         value=modules.config.default_output_format)
+                def random_checked(r):
+                    return gr.update(visible=not r)
 
-                # FreeU：这个勾选框本身就是启用开关（freeu_enabled 是参数），勾上才展开四个系数
+                def refresh_seed(r, seed_string):
+                    if r:
+                        return random.randint(constants.MIN_SEED, constants.MAX_SEED)
+                    else:
+                        try:
+                            seed_value = int(seed_string)
+                            if constants.MIN_SEED <= seed_value <= constants.MAX_SEED:
+                                return seed_value
+                        except ValueError:
+                            pass
+                        return random.randint(constants.MIN_SEED, constants.MAX_SEED)
+
+                seed_random.change(random_checked, inputs=[seed_random], outputs=[image_seed],
+                                   queue=False, show_progress=False)
+
+                image_number = gr.Slider(label='Image Number', minimum=1, maximum=modules.config.default_max_image_number, step=1, value=modules.config.default_image_number)
+
+                # FreeU: the checkbox is the enable switch itself (freeu_enabled is an argument),
+                # so ticking it both enables FreeU and unfolds the four coefficients.
                 freeu_enabled = gr.Checkbox(label='FreeU', value=modules.config.default_freeu_enabled,
                                             info='Rescales the UNet skip features; applies to the base model only.')
                 with gr.Row(visible=modules.config.default_freeu_enabled) as freeu_settings:
@@ -844,7 +866,29 @@ with gradio_root:
                 freeu_enabled.change(fn=lambda x: gr.update(visible=x), inputs=freeu_enabled,
                                      outputs=freeu_settings, queue=False, api_name=False)
 
-                # 输出相关开关与元数据：都是已验证的常规项，从 Debug Tools 移到这里
+                # Guidance / Sharpness: collapsed by default, unfolds on the checkbox (same
+                # pattern as Sampling above).
+                guidance_apply = gr.Checkbox(label="Guidance & Sharpness", value=False)
+                with gr.Column(visible=False) as guidance_tools:
+                    guidance_scale = gr.Slider(label='Guidance Scale', minimum=1.0, maximum=30.0, step=0.01,
+                                               value=modules.config.default_cfg_scale,
+                                               info='Higher value means style is cleaner, vivider, and more artistic.')
+                    sharpness = gr.Slider(label='Image Sharpness', minimum=0.0, maximum=30.0, step=0.001,
+                                          value=modules.config.default_sample_sharpness,
+                                          info='Higher value means image and texture are sharper.')
+                guidance_apply.change(fn=lambda x: gr.update(visible=x), inputs=guidance_apply,
+                                      outputs=guidance_tools, queue=False, api_name=False)
+
+                output_format = gr.Radio(label='Output Format',
+                                         choices=modules.flags.output_formats,
+                                         value=modules.config.default_output_format)
+
+                translate_prompts = gr.Checkbox(label='Translate Prompts',
+                                                          info='Uses the internet to translate prompts to English.',
+                                                          value=False)
+
+                # Output switches and metadata: all of them are read by the contract further down,
+                # and this is their only definition (Advanced used to define a second set).
                 disable_preview = gr.Checkbox(label='Disable Preview', value=modules.config.default_black_out_nsfw,
                                               interactive=not modules.config.default_black_out_nsfw,
                                               info='Disable preview during generation.')
@@ -873,36 +917,6 @@ with gradio_root:
                                                    inputs=[save_metadata_to_images],
                                                    outputs=[metadata_scheme],
                                                    queue=False, show_progress=False)
-
-                image_number = gr.Slider(label='Image Number', minimum=1, maximum=modules.config.default_max_image_number, step=1, value=modules.config.default_image_number)
-
-                negative_prompt = gr.Textbox(label='Negative Prompt', show_label=True, placeholder="Type prompt here.",
-                                             info='Describing what you do not want to see.', lines=2,
-                                             elem_id='negative_prompt',
-                                             value=modules.config.default_prompt_negative)
-                translate_prompts = gr.Checkbox(label='Translate Prompts',
-                                                          info='Uses the internet to translate prompts to English.',
-                                                          value=False)
-                seed_random = gr.Checkbox(label='Randomize seed', value=True)
-                image_seed = gr.Textbox(label='Seed', value=0, max_lines=1, visible=False)
-
-                def random_checked(r):
-                    return gr.update(visible=not r)
-
-                def refresh_seed(r, seed_string):
-                    if r:
-                        return random.randint(constants.MIN_SEED, constants.MAX_SEED)
-                    else:
-                        try:
-                            seed_value = int(seed_string)
-                            if constants.MIN_SEED <= seed_value <= constants.MAX_SEED:
-                                return seed_value
-                        except ValueError:
-                            pass
-                        return random.randint(constants.MIN_SEED, constants.MAX_SEED)
-
-                seed_random.change(random_checked, inputs=[seed_random], outputs=[image_seed],
-                                   queue=False, show_progress=False)
 
                 def update_history_link():
                     if args_manager.args.disable_image_log:
@@ -953,9 +967,8 @@ with gradio_root:
 
                 with gr.Row():
                     model_refresh = gr.Button(value='\U0001f504 Refresh All Files', variant='secondary', elem_classes='refresh_button')
-            # Advanced 里只留「调试/高级」这一档：原来的 Debug Tools / Control / Inpaint 三组。
-            # 常规项（Guidance/Sharpness、Output Format、FreeU、输出开关、元数据）都在 Settings，
-            # 原先那层 Advanced mode 勾选框随之删除。
+            # Advanced keeps only the debug/advanced group (Debug Tools / Control / Inpaint); regular
+            # controls live in Settings -- README_DEV, "Where the shared UI parameters live".
             with gr.Tab(label='Advanced'):
                 with gr.Column(visible=True) as advanced_tools:
                     with gr.Tab(label='Debug Tools'):
@@ -975,32 +988,10 @@ with gradio_root:
                                                  info='Enabling Fooocus\'s implementation of CFG mimicking for TSNR '
                                                       '(effective when real CFG > mimicked CFG).')
 
-                        disable_preview = gr.Checkbox(label='Disable Preview', value=modules.config.default_black_out_nsfw,
-                                                      interactive=not modules.config.default_black_out_nsfw,
-                                                      info='Disable preview during generation.')
-                        disable_intermediate_results = gr.Checkbox(label='Disable Intermediate Results', 
-                                                      value=False,
-                                                      interactive=True,
-                                                      info='Disable intermediate results during generation, only show final gallery.')
-
-                        black_out_nsfw = gr.Checkbox(label='Black Out NSFW', value=modules.config.default_black_out_nsfw,
-                                                     interactive=not modules.config.default_black_out_nsfw,
-                                                     info='Use black image if NSFW is detected.')
-
-                        black_out_nsfw.change(lambda x: gr.update(value=x, interactive=not x),
-                                     inputs=black_out_nsfw, outputs=disable_preview, queue=False, show_progress=False)
-
-                        if not args_manager.args.disable_metadata:
-                            save_metadata_to_images = gr.Checkbox(label='Save Metadata to Images', value=modules.config.default_save_metadata_to_images,
-                                                                  info='Adds parameters to generated images allowing manual regeneration.')
-                            metadata_scheme = gr.Radio(label='Metadata Scheme', choices=flags.metadata_scheme,
-                                                       value=first_valid(modules.config.default_metadata_scheme,
-                                                                         [y[1] for y in flags.metadata_scheme]),
-                                                       info='Image Prompt parameters are not included. Use a1111 for compatibility with Civitai.',
-                                                       visible=modules.config.default_save_metadata_to_images)
-
-                            save_metadata_to_images.change(lambda x: gr.update(visible=x), inputs=[save_metadata_to_images], outputs=[metadata_scheme], 
-                                                           queue=False, show_progress=False)
+                        # Disable Preview / Disable Intermediate Results / Black Out NSFW / Save Metadata /
+                        # Metadata Scheme used to be defined again here. The second definition silently won
+                        # (the contract is built at the end of this module and reads the last binding), so
+                        # the copies in Settings did nothing. They live in Settings only now.
 
                     with gr.Tab(label='Control'):
                         debugging_cn_preprocessor = gr.Checkbox(label='Debug Preprocessors', value=False,
@@ -1186,7 +1177,7 @@ with gradio_root:
 
         add_ctrl_group(ctrls, 'image_prompt', ip_ctrls)
 
-        expected_total = arg_schema.total() + 1  # +1 是 currentTask
+        expected_total = arg_schema.total() + 1  # +1 for currentTask
         if len(ctrls) != expected_total:
             raise RuntimeError(
                 f'[ReFocus] Argument contract mismatch: ctrls has {len(ctrls)} entries, '
