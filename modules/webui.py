@@ -12,7 +12,7 @@ import modules.controlnet_registry as controlnet_registry
 import modules.constants as constants
 import modules.flags as flags
 import modules.meta_parser
-import args_manager
+import modules.args_manager as args_manager
 import numpy as np
 
 from modules.private_logger import get_current_html_path

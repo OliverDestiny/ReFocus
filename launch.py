@@ -5,8 +5,8 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from args_manager import args
-from webui import gradio_root, get_custom_head
+from modules.args_manager import args
+from modules.webui import gradio_root, get_custom_head
 from gradio import mount_gradio_app
 from modules import config, html, constants
 

@@ -35,7 +35,7 @@ def verify_ui():
     import modules.arg_schema as arg_schema
 
     try:
-        import webui
+        import modules.webui as webui
     except Exception as exc:
         print(f'FAIL: 导入 webui 失败，参数契约未通过校验：\n  {type(exc).__name__}: {exc}')
         return 1

@@ -48,7 +48,7 @@ def _image_prompt_args() -> Tuple[str, ...]:
 
 def _metadata_enabled() -> bool:
     # 延迟导入，避免模块加载期的导入顺序问题
-    import args_manager
+    import modules.args_manager as args_manager
     return not args_manager.args.disable_metadata
 
 

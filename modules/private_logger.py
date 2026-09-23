@@ -1,5 +1,5 @@
 import os
-import args_manager
+import modules.args_manager as args_manager
 import modules.config
 import json
 import urllib.parse

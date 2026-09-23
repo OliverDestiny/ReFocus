@@ -44,7 +44,7 @@ def worker():
     import extras.ip_adapter as ip_adapter
     import modules.deps_models_download as downloader
     import ReFocus_version
-    import args_manager
+    import modules.args_manager as args_manager
 
     from modules.censor import censor_batch
 

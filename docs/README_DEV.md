@@ -1,6 +1,6 @@
 # README_DEV.md
 
-Developer documentation for ReFocus. For user documentation, see `manual_en.md` and `manual_cn.md`.
+Developer documentation for ReFocus. For user documentation, see `manual_en.md` and `manual_cn.md` in this folder.
 
 ---
 
@@ -112,13 +112,20 @@ latter, because a renamed key has to keep accepting the old spelling.
 
 ### Directory Layout
 
+Two rules decide where a file lives: the vendored core stays at the root so replacing it is a wholesale
+copy (`comfy/` plus the `node_helpers.py` it imports by bare name), and everything of ReFocus's own
+that is not an entry point lives under `modules/`. `launch.py` and `ReFocus_version.py` are the two
+remaining top-level Python files; `args_manager.py` and `webui.py` moved into `modules/` with the rest,
+and the documents moved into `docs/`.
+
+
 ```txt
 ReFocus/
 ├── launch.py                    # Entry point: FastAPI app + uvicorn
 │
-├── args_manager.py              # CLI argument definitions
-├── webui.py                     # Gradio UI definition (~1000+ lines)
 ├── ReFocus_version.py           # Version File
+│
+├── docs/                        # Documentation (this file, the manuals, NOTICE)
 │
 ├── modules/                     # Core backend
 │   ├── config.py                # Config loading, model paths, presets
@@ -199,7 +206,7 @@ python launch.py
 
 ### CLI Arguments
 
-Key arguments defined in `args_manager.py`:
+Key arguments defined in `modules/args_manager.py`:
 
 | Argument | Description |
 | :--- | :--- |
@@ -210,7 +217,7 @@ Key arguments defined in `args_manager.py`:
 | `--disable-image-log` | Disable writing images to disk |
 | `--disable-metadata` | Disable metadata embedding |
 
-See `args_manager.py` for the full list.
+See `modules/args_manager.py` for the full list.
 
 ---
 
@@ -220,7 +227,7 @@ See `args_manager.py` for the full list.
 
 Runs in a separate thread (`threading.Thread`). Handles:
 
-- Parsing UI inputs (via `ctrls` list from `webui.py`)
+- Parsing UI inputs (via `ctrls` list from `modules/webui.py`)
 - Model loading and caching
 - Diffusion sampling (with progress callbacks)
 - Inpaint processing
@@ -234,7 +241,7 @@ The worker communicates with the UI via `AsyncTask.yields`:
 | `results` | Show intermediate results |
 | `finish` | Final results and UI reset |
 
-### `webui.py`
+### `modules/webui.py`
 
 Defines the entire Gradio UI. Key sections:
 
@@ -324,7 +331,7 @@ The sub-application exports `create_prompt_helper_app()`, which returns a FastAP
 
 ### UI Development
 
-Gradio components are defined in `webui.py`. For UI changes, no frontend build step is required—just reload the page.
+Gradio components are defined in `modules/webui.py`. For UI changes, no frontend build step is required—just reload the page.
 
 ### Worker Logging
 

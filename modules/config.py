@@ -2,7 +2,7 @@ import os
 import json
 import math
 import numbers
-import args_manager
+import modules.args_manager as args_manager
 import modules.flags
 
 from modules.util import get_files_from_folder

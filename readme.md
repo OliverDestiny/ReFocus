@@ -26,11 +26,13 @@ Rebuilt from [DeFooocus](https://github.com/ehristoforu/DeFooocus) with signific
 ReFocus/
 ├── launch.py              # Entry point
 │
-├── args_manager.py        # CLI arguments
-├── webui.py               # Gradio UI
 ├── ReFocus_version.py     # Version info
 │
+├── docs/                  # Developer and user documentation
+│
 ├── modules/               # Core backend logic
+│   ├── args_manager.py    # CLI arguments
+│   ├── webui.py           # Gradio UI
 ├── extras/                # Extension modules (IP-Adapter, Describe, etc.)
 ├── comfy/                 # ComfyUI core, byte-identical to upstream
 ├── node_helpers.py        # required by comfy/hooks.py
