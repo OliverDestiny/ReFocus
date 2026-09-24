@@ -743,7 +743,8 @@ with gradio_root:
                 # Ordered by how often a normal session touches a control: most used at the top.
                 # Steps and its three presets share a row with equal_height, so the buttons stand
                 # at the slider's height instead of floating half a row above it. The preset labels
-                # are numbers only: "45 (Quality)" does not fit three of them next to the slider.
+                # are numbers only: "45 (Quality)" does not fit three of them next to the slider,
+                # and they read left to right in ascending order.
                 with gr.Row(equal_height=True, elem_classes='nowrap_row'):
                     steps_slider = gr.Slider(
                         minimum=1, maximum=50, step=1,
@@ -752,16 +753,16 @@ with gradio_root:
                         elem_id="steps_slider",
                         scale=4
                     )
-                    preset_45 = gr.Button("45", size="sm", scale=0, min_width=52,
-                                          elem_id='steps_preset_45')
-                    preset_25 = gr.Button("25", size="sm", scale=0, min_width=52,
-                                          elem_id='steps_preset_25')
                     preset_10 = gr.Button("10", size="sm", scale=0, min_width=52,
                                           elem_id='steps_preset_10')
+                    preset_25 = gr.Button("25", size="sm", scale=0, min_width=52,
+                                          elem_id='steps_preset_25')
+                    preset_45 = gr.Button("45", size="sm", scale=0, min_width=52,
+                                          elem_id='steps_preset_45')
 
-                preset_45.click(lambda: gr.update(value=45), outputs=steps_slider)
-                preset_25.click(lambda: gr.update(value=25), outputs=steps_slider)
                 preset_10.click(lambda: gr.update(value=10), outputs=steps_slider)
+                preset_25.click(lambda: gr.update(value=25), outputs=steps_slider)
+                preset_45.click(lambda: gr.update(value=45), outputs=steps_slider)
 
                 # Size: the sliders carry number boxes and the swap button flips them; the presets
                 # are buttons laid out four to a row, which is what fits this column.
