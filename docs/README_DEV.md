@@ -130,6 +130,20 @@ defaults to **12345**, the core's own default is 8188, and `GRADIO_SERVER_PORT` 
 `--disable-metadata` is the other shared name. Everything else (`--listen`, `--temp-path`,
 `--disable-smart-memory`, `--fast`, …) still comes from the core.
 
+### Custom CSS/JS and `js=` callbacks
+
+`modules/webui.get_custom_head()` reads `css/style.css` and the five scripts under `javascript/`,
+**relative to the repository root** (the parent of `modules/`), and appends them to `<head>`. A wrong
+path here fails silently — each file is skipped and the page simply loses that script — so every miss
+is printed at startup and `.zcode/probes/ui_probe.py` asserts the whole set is present. When these
+paths pointed at `modules/` the entire bundle was dropped: the page still rendered (Gradio's own JS),
+but every custom feature was dead, including the Input Image checkbox, whose event carried
+`js=switch_js` and aborted in the browser because `viewer_to_bottom()` did not exist.
+
+For that reason the state-changing part of an event never carries `js`: a throwing js callback aborts
+the whole event (no server round trip at all), so `input_image_checkbox.change(...)` updates the panel
+visibility on its own and the scrolling runs in a following `.then(fn=lambda: None, js=...)`.
+
 ### Stack
 
 | Component | Technology |

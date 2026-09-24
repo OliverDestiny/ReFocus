@@ -113,6 +113,31 @@ progress::after {
   white-space: nowrap !important;
 }
 
+/* Rows that must not wrap on a narrow window (Steps with its presets, Width/Height with the
+   swap button). Gradio wraps the sliders of a row in an inner ".form" flex container that
+   carries the theme's per-child min-widths, so both levels are unwrapped here: the outer row
+   and that inner form. The sliders keep a floor so they stay draggable. */
+.nowrap_row,
+.nowrap_row > .form {
+  flex-wrap: nowrap !important;
+}
+
+.nowrap_row > * {
+  min-width: 0 !important;
+}
+
+.nowrap_row > .form > * {
+  min-width: 96px !important;
+}
+
+.nowrap_row input[type="number"] {
+  min-width: 58px !important;
+}
+
+.nowrap_row > button {
+  min-width: 52px !important;
+}
+
 .aspect_ratios label {
     width: 140px !important;
 }

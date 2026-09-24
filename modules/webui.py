@@ -21,27 +21,33 @@ from modules.util import is_json
 
 # ========== Read and inject custom CSS/JS ==========
 def get_custom_head():
-    css_path = os.path.join(os.path.dirname(__file__), "css", "style.css")
-    js_path = os.path.join(os.path.dirname(__file__), "javascript", "script.js")
+    """Custom CSS and JS for <head>.
+
+    The assets live at the repository root (css/ and javascript/), one level above this module.
+    A wrong path here is not loud: the file is skipped and the page just loses the script, so
+    each miss is reported instead of being ignored.
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     head = ""
 
+    css_path = os.path.join(root, "css", "style.css")
     if os.path.exists(css_path):
         with open(css_path, "r", encoding="utf-8") as f:
             head += f"<style>{f.read()}</style>"
+    else:
+        print(f'[ReFocus] Custom CSS not found: {css_path}')
 
-    # localization JS
+    # localization first: the other scripts call onUiLoaded, which script.js defines.
     head += f"<script>{localization_js(args_manager.args.language)}</script>"
 
-    if os.path.exists(js_path):
-        with open(js_path, "r", encoding="utf-8") as f:
-            head += f"<script>{f.read()}</script>"
-
-    # Other required JS files (add more here as needed)
-    for js_file in ["contextMenus.js", "zoom.js", "edit-attention.js", "viewer.js", "imageviewer.js"]:
-        js_file_path = os.path.join(os.path.dirname(__file__), "javascript", js_file)
+    for js_file in ["script.js", "contextMenus.js", "zoom.js", "edit-attention.js", "viewer.js",
+                    "imageviewer.js"]:
+        js_file_path = os.path.join(root, "javascript", js_file)
         if os.path.exists(js_file_path):
             with open(js_file_path, "r", encoding="utf-8") as f:
                 head += f"<script>{f.read()}</script>"
+        else:
+            print(f'[ReFocus] Custom JS not found: {js_file_path}')
 
     if args_manager.args.theme:
         head += f'<script>set_theme("{args_manager.args.theme}");</script>'
@@ -711,8 +717,13 @@ with gradio_root:
             switch_js = "(x) => {if(x){viewer_to_bottom(100);viewer_to_bottom(500);}else{viewer_to_top();} return x;}"
             down_js = "() => {viewer_to_bottom();}"
 
+            # The visibility update carries no js: a throwing js callback aborts the whole event,
+            # which is how a missing viewer.js used to make this checkbox do nothing at all.
+            # The scrolling is a separate .then, so it can fail on its own.
             input_image_checkbox.change(lambda x: gr.update(visible=x), inputs=input_image_checkbox,
-                                        outputs=image_input_panel, queue=False, show_progress=False, js=switch_js)
+                                        outputs=image_input_panel, queue=False, show_progress=False) \
+                .then(fn=lambda: None, inputs=[input_image_checkbox], js=switch_js,
+                      queue=False, show_progress=False)
             input_image_checkbox.change(
                 lambda checked: gr.update(value=False) if not checked else gr.update(),
                 inputs=input_image_checkbox,
@@ -733,7 +744,7 @@ with gradio_root:
                 # Steps and its three presets share a row with equal_height, so the buttons stand
                 # at the slider's height instead of floating half a row above it. The preset labels
                 # are numbers only: "45 (Quality)" does not fit three of them next to the slider.
-                with gr.Row(equal_height=True):
+                with gr.Row(equal_height=True, elem_classes='nowrap_row'):
                     steps_slider = gr.Slider(
                         minimum=1, maximum=50, step=1,
                         value=modules.config.default_steps if hasattr(modules.config, 'default_steps') else 25,
@@ -756,7 +767,7 @@ with gradio_root:
                 # are buttons laid out four to a row, which is what fits this column.
                 _default_w, _default_h = (int(v) for v in modules.config.default_aspect_ratio
                                           .replace('×', ' ').split(' ')[:2])
-                with gr.Row(equal_height=True):
+                with gr.Row(equal_height=True, elem_classes='nowrap_row'):
                     resolution_width = gr.Slider(label='Width', minimum=512, maximum=2048, step=8,
                                                  value=_default_w, elem_id='resolution_width')
                     resolution_height = gr.Slider(label='Height', minimum=512, maximum=2048, step=8,
@@ -825,7 +836,7 @@ with gradio_root:
                     api_name=False,
                 )
 
-                with gr.Row(equal_height=True):
+                with gr.Row(equal_height=True, elem_classes='nowrap_row'):
                     seed_random = gr.Checkbox(label='Randomize seed', value=True, scale=0, min_width=170)
                     image_seed = gr.Textbox(label='Seed', value=0, max_lines=1, visible=False, scale=2)
 
