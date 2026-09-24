@@ -57,6 +57,7 @@ cn_ip = "ImagePrompt"
 cn_ip_face = "FaceSwap"
 cn_canny = "PyraCanny"
 cn_cpds = "CPDS"
+cn_depth = "Depth"
 # Type list, defaults (stop, weight), loading and preprocessing live in modules/controlnet_registry.py
 
 inpaint_engine_versions = ['None', 'v1', 'v2.5', 'v2.6']

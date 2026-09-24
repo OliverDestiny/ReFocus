@@ -92,6 +92,28 @@ def downloading_controlnet_canny():
     return os.path.join(path_controlnet, 'control-lora-canny-rank128.safetensors')
 
 
+def downloading_controlnet_depth():
+    """The SDXL depth Control-LoRA (rank128), same Stability release as the Canny one."""
+    return _download_with_fallback(
+        mirror_url=None,
+        official_url='https://huggingface.co/stabilityai/control-lora/resolve/main/'
+                     'control-LoRAs-rank128/control-lora-depth-rank128.safetensors',
+        model_dir=path_controlnet,
+        file_name='control-lora-depth-rank128.safetensors',
+    )
+
+
+def downloading_midas_depth_model():
+    """MiDaS DPT-Hybrid (about 500 MB): the depth estimator the Control-LoRA was trained against."""
+    return _download_with_fallback(
+        mirror_url=None,
+        official_url='https://huggingface.co/lllyasviel/Annotators/resolve/main/'
+                     'dpt_hybrid-midas-501f0c75.pt',
+        model_dir=path_controlnet,
+        file_name='dpt_hybrid-midas-501f0c75.pt',
+    )
+
+
 def downloading_controlnet_cpds():
     load_file_from_url(
         url='https://huggingface.co/OliverBlack56864/ReFocus-deps/resolve/main/fooocus_xl_cpds_128.safetensors',

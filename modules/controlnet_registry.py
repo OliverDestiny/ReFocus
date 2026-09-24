@@ -112,6 +112,25 @@ def _preprocess_cpds(image, params, ctx: PreprocessContext):
     return core.numpy_to_pytorch(img), img
 
 
+# --- Depth ---
+
+def _load_depth() -> str:
+    import modules.deps_models_download as downloader
+    return str(Path(downloader.downloading_controlnet_depth()).resolve())
+
+
+def _preprocess_depth(image, params, ctx: PreprocessContext):
+    import modules.core as core
+    import extras.preprocessors as preprocessors
+    from modules.util import HWC3, resize_image
+
+    img = resize_image(HWC3(image), width=ctx.width, height=ctx.height)
+    if not ctx.skipping_preprocessor:
+        img = preprocessors.midas_depth(img)
+    img = HWC3(img)
+    return core.numpy_to_pytorch(img), img
+
+
 # --- ImagePrompt / FaceSwap ---
 
 # https://github.com/tencent-ailab/IP-Adapter/blob/d580c50a291566bbf9fc7ac0f760506607297e6d/README.md?plain=1#L75
@@ -179,6 +198,8 @@ TYPES: Tuple[ControlNetType, ...] = (
     ControlNetType(flags.cn_canny, 'conditioning', 0.5, 1.0, _load_canny, _preprocess_canny,
                    feeds_controlnet_pipeline=True, param_spec=CANNY_PARAMS),
     ControlNetType(flags.cn_cpds, 'conditioning', 0.5, 1.0, _load_cpds, _preprocess_cpds,
+                   feeds_controlnet_pipeline=True),
+    ControlNetType(flags.cn_depth, 'conditioning', 0.5, 1.0, _load_depth, _preprocess_depth,
                    feeds_controlnet_pipeline=True),
     ControlNetType(flags.cn_ip_face, 'unet_patch', 0.9, 0.75, _load_ip_face, _preprocess_ip_face,
                    param_spec=FACE_PARAMS),

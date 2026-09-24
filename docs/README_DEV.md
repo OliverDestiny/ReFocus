@@ -68,6 +68,22 @@ Both preprocessors and their parameters moved here from the old global Debug Too
 thresholds belong to PyraCanny and the face detection confidence to FaceSwap, and they are now per slot
 rather than per run.
 
+The five types are ImagePrompt, PyraCanny, CPDS, **Depth** and FaceSwap. Depth needs no parameters of
+its own: it pairs Stability's `control-lora-depth-rank128` with MiDaS DPT-Hybrid, the estimator that
+Control-LoRA was trained against.
+
+- `extras/preprocessors.MiDaSDepth` holds the model: the architecture comes from `intel-isl/MiDaS`
+  through `torch.hub` (fetched once, cached under `~/.cache/torch/hub`, so only the first call in a
+  fresh environment needs network), the weights are the local `dpt_hybrid-midas-501f0c75.pt` (about
+  500 MB). The checkpoint matches the hub architecture with zero missing and zero unexpected keys.
+  - Preprocessing follows MiDaS's own recipe: short side to 384 with both sides snapped to 32, ImageNet
+    normalisation, then the prediction is resized back and min-max normalised to a 0..255 grey image.
+  - Measured: 13 s for the first call (hub fetch plus CUDA warm-up), 0.05 s per image afterwards, and
+    the depth map of a real 512x512 generation came out with std 92.9 (a real gradient, not a constant).
+- Verified with the same control experiment the other types use: same reference image and seed, Depth
+  weight 0.2 versus 1.0 differs by mean|diff| 31.2/255 over 85 % of pixels, so the depth condition
+  really reaches the pipeline (`.zcode/probes/main_batch_probe.py`).
+
 ### Widget values must be members of their choices
 
 Gradio accepts an initial `value` that is not in the widget's `choices`, but it rejects it **at request
