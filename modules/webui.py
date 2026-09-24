@@ -862,18 +862,53 @@ with gradio_root:
                 image_number = gr.Slider(label='Image Number', minimum=1, maximum=modules.config.default_max_image_number, step=1, value=modules.config.default_image_number)
 
                 # FreeU: the checkbox is the enable switch itself (freeu_enabled is an argument),
-                # so ticking it both enables FreeU and unfolds the four coefficients.
+                # so ticking it both enables FreeU and unfolds the coefficients. The four sliders
+                # sit two per row: at three per row the fourth wrapped onto a line of its own.
                 freeu_enabled = gr.Checkbox(label='FreeU', value=modules.config.default_freeu_enabled,
                                             info='Rescales the UNet skip features; applies to the base model only.')
-                with gr.Row(visible=modules.config.default_freeu_enabled) as freeu_settings:
-                    freeu_b1 = gr.Slider(label='B1', minimum=0, maximum=2, step=0.01,
-                                         value=modules.config.default_freeu_b1)
-                    freeu_b2 = gr.Slider(label='B2', minimum=0, maximum=2, step=0.01,
-                                         value=modules.config.default_freeu_b2)
-                    freeu_s1 = gr.Slider(label='S1', minimum=0, maximum=4, step=0.01,
-                                         value=modules.config.default_freeu_s1)
-                    freeu_s2 = gr.Slider(label='S2', minimum=0, maximum=4, step=0.01,
-                                         value=modules.config.default_freeu_s2)
+                with gr.Column(visible=modules.config.default_freeu_enabled) as freeu_settings:
+                    with gr.Row(equal_height=True):
+                        freeu_b1 = gr.Slider(label='B1', minimum=0, maximum=2, step=0.01,
+                                             value=modules.config.default_freeu_b1)
+                        freeu_b2 = gr.Slider(label='B2', minimum=0, maximum=2, step=0.01,
+                                             value=modules.config.default_freeu_b2)
+                    with gr.Row(equal_height=True):
+                        freeu_s1 = gr.Slider(label='S1', minimum=0, maximum=4, step=0.01,
+                                             value=modules.config.default_freeu_s1)
+                        freeu_s2 = gr.Slider(label='S2', minimum=0, maximum=4, step=0.01,
+                                             value=modules.config.default_freeu_s2)
+
+                    # Presets: the classic pair is upstream's FreeU_V2 default, mild is a lighter
+                    # touch, conservative is close to off. Each button sets all four at once.
+                    with gr.Row(equal_height=True):
+                        freeu_preset_classic = gr.Button('Classic', size='sm')
+                        freeu_preset_mild = gr.Button('Mild', size='sm')
+                        freeu_preset_conservative = gr.Button('Conservative', size='sm')
+
+                FREEU_PRESETS = {
+                    'classic': (1.3, 1.4, 0.9, 0.2),
+                    'mild': (1.1, 1.2, 0.6, 0.4),
+                    'conservative': (1.01, 1.02, 0.99, 0.95),
+                }
+
+                def freeu_preset_clicked(name):
+                    b1, b2, s1, s2 = FREEU_PRESETS[name]
+                    return (gr.update(value=b1), gr.update(value=b2),
+                            gr.update(value=s1), gr.update(value=s2))
+
+                def make_freeu_preset_handler(name):
+                    # Same reason as the resolution presets: bind the name into the closure.
+                    def clicked():
+                        return freeu_preset_clicked(name)
+                    return clicked
+
+                for _button, _name in ((freeu_preset_classic, 'classic'),
+                                       (freeu_preset_mild, 'mild'),
+                                       (freeu_preset_conservative, 'conservative')):
+                    _button.click(make_freeu_preset_handler(_name),
+                                  outputs=[freeu_b1, freeu_b2, freeu_s1, freeu_s2],
+                                  queue=False, show_progress=False)
+
                 freeu_ctrls = [freeu_enabled, freeu_b1, freeu_b2, freeu_s1, freeu_s2]
                 freeu_enabled.change(fn=lambda x: gr.update(visible=x), inputs=freeu_enabled,
                                      outputs=freeu_settings, queue=False, api_name=False)
