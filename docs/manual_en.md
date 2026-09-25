@@ -28,8 +28,6 @@ If you have a previously generated ReFocus image with embedded parameters, you c
 - Upload it to view the complete parameter record
 - Click "Apply Metadata" to load all parameters back into the UI for easy reproduction
 
----
-
 ### rembg
 
 The **rembg** tab provides one-click background removal:
@@ -55,8 +53,6 @@ The **Prompt Helper** tab is based on `sd-webui-prompt-all-in-one-app`, providin
 
 The tool runs in a separate panel. You can combine prompts in the builder, then use the built-in "Copy to Clipboard" button to paste into the main prompt box.
 
----
-
 ## Controlling Image Generation
 
 For more control, check **Input Image** — three tool panels will expand below.
@@ -81,12 +77,14 @@ Each slot takes a reference image and a type. Type-specific settings (for exampl
 thresholds, or the face detection confidence for FaceSwap) appear under **Advanced** in that tab,
 per slot.
 
-Upload reference images to influence the generation. Four control types are available:
+Upload reference images to influence the generation. Five control types are available:
 
 - **ImagePrompt**: Extracts style or content from the reference
 - **PyraCanny**: Uses edges to lock composition — good for preserving pose or layout
 - **CPDS**: Preserves spatial structure and depth
 - **FaceSwap**: Maintains facial consistency
+- **Depth**: Runs the reference through MiDaS and feeds Stability's depth Control-LoRA — good for
+  locking the layout of a scene
 
 Each reference image can be adjusted independently:
 
@@ -95,32 +93,19 @@ Each reference image can be adjusted independently:
 
 ### Inpaint
 
-Upload reference images to influence the generation. Four control types are available:
+The Inpaint tab is a full editor: paint or erase on the image to build the mask (or upload one) and
+the model regenerates only the masked regions. **Show Mask Generation** can build the mask for you,
+see below.
 
-- **ImagePrompt**: Extracts style or content from the reference
-- **PyraCanny**: Uses edges to lock composition — good for preserving pose or layout
-- **CPDS**: Preserves spatial structure and depth
-- **FaceSwap**: Maintains facial consistency
-
-Each reference image can be adjusted independently:
-
-- **Stop At**: Controls when the control network stops influencing the sampling process (higher = longer influence)
-- **Weight**: Controls the strength of the control network's influence
-
-### Inpaint
-
-Draw white areas (mask) on the image to let the model regenerate those regions.
-
-- **Inpaint**: Erase and redraw a specific area
+- **Method**: *Inpaint (default)* for a plain masked redraw, *Improve Detail (face, hand, eyes, etc.)*
+  for small areas that need more detail, *Modify Content (add objects, change background, etc.)* for
+  larger changes.
+- **Inpaint Additional Prompt**: extra text that only applies to the masked area.
 
 ### Automatic Mask Generation
 
-Check **"Show Mask Generation"** to let the system automatically analyze the image and generate a mask. Four models are available:
-
-- **isnet-general-use**: General-purpose model, suitable for most scenes (default)
-- **u2net**: Classic salient object detection model, fast
-- **u2net_human_seg**: Specialized for human segmentation, ideal for portraits
-- **isnet-anime**: Optimized for anime/illustration style images
+Check **"Show Mask Generation"** to let the system analyze the image and generate a mask. The model
+list is the same four as in **rembg** (see Tools above).
 
 Select a model and click **"Generate mask from image"**. The mask will be overlaid on the image. You can still manually adjust the mask (paint or erase) before performing the inpaint operation.
 
@@ -134,15 +119,15 @@ ordered by how often a normal session touches each control, most used at the top
 
 ### Basic Parameters (Settings)
 
-- **Steps**: Higher values generally produce better details. 1–10 steps automatically switch to LCM ultra-fast mode. The three buttons next to it set 45, 25 or 10.
+- **Steps**: Higher values generally produce better details. 1–10 steps automatically switch to LCM ultra-fast mode. The three buttons next to it set 10, 25 or 45.
 - **Width / Height**: Set the output size directly. Each slider has a number box next to it, the **⇄** button exchanges them, and the saved aspect ratios are available as buttons underneath (four per row) which set both at once. Sizes snap to multiples of 8; SDXL is trained around one megapixel, so the presets all keep the short side at 1024 or more.
 - **Negative Prompt**: Collapsed by default — click the heading to describe what you do not want to appear in the image.
 - **Preset**: Apply a saved preset to switch an entire parameter configuration at once.
 - **Sampling**: Tick the box to pick the sampler and scheduler manually.
 - **Seed**: Fixed seeds reproduce the same result; random seeds produce different results each time.
 - **Image Number**: Number of images to generate per batch.
-- **FreeU**: Tick the box to enable it and reveal its four coefficients (B1, B2, S1, S2). It rescales the UNet's skip features and can add background detail; it applies to the base model only, and it is off by default.
-- **Guidance & Sharpness**: Tick the box to reveal Guidance Scale and Image Sharpness, which are described under Advanced Debug Tools below.
+- **FreeU**: Tick the box to enable it and reveal its four coefficients (B1, B2, S1, S2), two per row, with **Classic** (1.3 / 1.4 / 0.9 / 0.2), **Mild** (1.1 / 1.2 / 0.6 / 0.4) and **Conservative** (1.01 / 1.02 / 0.99 / 0.95) presets that set all four at once. FreeU rescales the UNet's skip features and can add background detail; it applies to the base model only, and it is off by default.
+- **Guidance & Sharpness**: Tick the box to reveal **Guidance Scale** (higher values follow the prompt more closely) and **Image Sharpness** (higher values sharpen textures; too high looks artificial).
 - **Output Format**: png, jpg or webp.
 
 ### Models and LoRA
@@ -151,24 +136,35 @@ ordered by how often a normal session touches each control, most used at the top
 - Refiner Switch: Controls at which step to switch to the refiner.
 - Up to 5 LoRAs can be loaded simultaneously, each with individually adjustable weights.
 
-### FreeU
-
-FreeU rescales the UNet's skip features and can add background detail; it works on the base model
-only. It is off by default — turn it on and compare, since the effect depends on the model.
-
-### Advanced Debug Tools
+### Advanced (Debug Tools / Control / Inpaint)
 
 > ⚠️ **Warning**
 >
 > The following parameters are intended for advanced users and debugging scenarios. **If you do not understand what a parameter does, do not change it.** In most cases, default values produce excellent results. Incorrect adjustments may degrade image quality or cause unexpected outputs.
 
-- **Guidance Scale (CFG Scale)**: Higher values make the result more faithful to the prompt. The default is usually sufficient.
-- **Image Sharpness**: Controls image clarity. Excessive adjustment may cause unnatural artifacts.
-- **Output Format**: Select the file format for saving images (png, jpg, webp).
-- **Sampler / Scheduler**: Manually select the sampling algorithm. Keep the defaults unless you understand the differences.
-- **ControlNet Softness**: Adjusts how "soft" the ControlNet's influence is. The default works for most cases.
-- **Canny Threshold** and **Face Detection Confidence**: these now live with the ControlNet type that
-  uses them — open the Image Prompt tab, pick the type, and tick **Advanced** in that tab.
+**Debug Tools**
+
+- **Positive / Negative ADM Guidance Scaler** and **ADM Guidance End At Step**: the base model's ADM
+  guidance; 1.0 disables a scaler.
+- **Refiner swap method**: how the refiner is applied (`joint`, `separate`, `vae`).
+- **CFG Mimicking from TSNR**: mimics CFG from the TSNR value; effective when the real CFG is higher
+  than the mimicked one.
+
+**Control**
+
+- **Debug Preprocessors / Skip Preprocessors**: show the preprocessed control image, or skip
+  preprocessing because your image already is a canny/depth/face crop.
+- **Mixing Image Prompt and Vary/Upscale** and **Mixing Image Prompt and Inpaint**: let the Image
+  Prompt slots apply to those modes too.
+- **Softness of ControlNet**: similar to the Control Mode in A1111 (0.0 disables it).
+- **Canny Threshold** and **Face Detection Confidence** live with the type that uses them: open the
+  Image Prompt tab, pick the type and tick **Advanced** in that tab.
+
+**Inpaint**
+
+- **Debug Inpaint Preprocessing**, **Disable initial latent in inpaint**, **Inpaint Engine**,
+  **Inpaint Denoising Strength**, **Inpaint Respective Field** (0 = only the mask, 1 = the whole
+  image), **Mask Erode or Dilate** and **Invert Mask**.
 
 > If your goal is simply to create a good-looking image, **do not touch the parameters above**. They exist to solve specific technical issues, not for everyday use.
 
