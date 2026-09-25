@@ -262,3 +262,12 @@ footer {
 .dark .modalNext:hover {
     background-color: rgba(0, 0, 0, 0.8);
 }
+
+/* The Inpaint editor's empty state paints a white "paper" inside its Pixi scene, and that paper is
+   drawn once when the editor mounts, so it stays white whatever the theme is. The component renders
+   its empty-state overlay (`.empty`, position:absolute, 100% x 100%) on top of exactly that box, so
+   painting the overlay with the dark surface colour hides the paper; light mode keeps it. Once an
+   image is loaded the overlay is gone and the canvas shows the image. */
+.dark .empty.wrap {
+    background: #27272a;
+}

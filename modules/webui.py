@@ -30,10 +30,9 @@ def get_custom_head():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     head = ""
 
-    # theme.js resolves the theme and puts it in the URL before Gradio boots (the ImageEditor canvas
-    # paints itself once from the resolved theme); --theme has to be visible to it first.
-    if args_manager.args.theme:
-        head += f'<script>window.__refocus_theme = "{args_manager.args.theme}";</script>'
+    # theme.js only feeds the Prompt Helper iframe; the theme itself is resolved by a script that
+    # launch.py injects into <head>, because Gradio injects this head too late for the ImageEditor
+    # canvas (README_DEV, "Theme").
     theme_js = os.path.join(root, "javascript", "theme.js")
     if os.path.exists(theme_js):
         with open(theme_js, "r", encoding="utf-8") as f:
@@ -713,7 +712,7 @@ with gradio_root:
             # The scrolling is a separate .then, so it can fail on its own.
             input_image_checkbox.change(lambda x: gr.update(visible=x), inputs=input_image_checkbox,
                                         outputs=image_input_panel, queue=False, show_progress=False) \
-                .then(fn=lambda: None, inputs=[input_image_checkbox], js=switch_js,
+                .then(fn=lambda *_: None, inputs=[input_image_checkbox], js=switch_js,
                       queue=False, show_progress=False)
             input_image_checkbox.change(
                 lambda checked: gr.update(value=False) if not checked else gr.update(),
@@ -724,9 +723,12 @@ with gradio_root:
             ip_advanced.change(lambda: None, queue=False, show_progress=False, js=down_js)
 
             current_tab = gr.Textbox(value='uov', visible=False)
-            uov_tab.select(lambda: 'uov', outputs=current_tab, queue=False, js=down_js, show_progress=False)
-            inpaint_tab.select(lambda: 'inpaint', outputs=current_tab, queue=False, js=down_js, show_progress=False)
-            ip_tab.select(lambda: 'ip', outputs=current_tab, queue=False, js=down_js, show_progress=False)
+            # a select event passes its own data to the handler, so these have to accept one argument:
+            # a zero-argument lambda raised at request time and current_tab stayed 'uov' forever, which
+            # silently kept the inpaint and image-prompt modes from ever reaching the worker
+            uov_tab.select(lambda *_: 'uov', outputs=current_tab, queue=False, js=down_js, show_progress=False)
+            inpaint_tab.select(lambda *_: 'inpaint', outputs=current_tab, queue=False, js=down_js, show_progress=False)
+            ip_tab.select(lambda *_: 'ip', outputs=current_tab, queue=False, js=down_js, show_progress=False)
 
         with gr.Column(scale=1, visible=modules.config.default_advanced_checkbox) as advanced_column:
             with gr.Tab(label='Settings'):

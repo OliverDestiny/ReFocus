@@ -68,8 +68,17 @@ progress::after {
   height: 30px !important;
 }
 
+/* The prompt row is as tall as its content: a fixed 80px clipped the Generate column once the
+   Polish Draft button became visible next to Generate, and the overflow landed on the checkbox row
+   and the draft history below it. */
 .type_row{
-  height: 80px !important;
+  height: auto !important;
+  min-height: 80px !important;
+}
+
+/* A taller main prompt box: long prompts should not need the scrollbar. */
+#positive_prompt{
+  height: 140px !important;
 }
 
 .type_row_half{
@@ -87,8 +96,13 @@ progress::after {
   box-shadow: none !important;
 }
 
+/* Wide enough for "Input Image" and "Advanced" on one line; at 250px the first one wrapped. */
 .advanced_check_row{
-  width: 250px !important;
+  width: 340px !important;
+}
+
+.advanced_check_row label{
+  white-space: nowrap !important;
 }
 
 .min_check{
