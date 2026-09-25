@@ -280,6 +280,16 @@ with gradio_root:
                                      value=["assets/favicon.png"],
                                      preview=True)
             with gr.Tab("Photopea"):
+                # Photopea sits behind a Cloudflare bot check. A top-level tab can pass it, an iframe
+                # cannot (the clearance cookie is a third-party cookie there), so the embedded editor
+                # can come up as "refused to connect". The button is the way out; it carries the same
+                # API parameters the iframe uses.
+                gr.Markdown(
+                    "If the editor below shows a refused connection, Photopea's bot check could not run "
+                    "inside the frame. Use the button to open the same editor in its own tab.")
+                open_photopea = gr.Button(value='Open Photopea in a new tab', variant='secondary',
+                                          link=f"{PHOTOPEA_MAIN_URL}{get_photopea_url_params()}",
+                                          link_target='_blank')
                 with gr.Row():
                     photopea = gr.HTML(
                         f"""<iframe id="{PHOTOPEA_IFRAME_ID}" 
