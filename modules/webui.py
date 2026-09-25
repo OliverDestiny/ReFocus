@@ -30,6 +30,17 @@ def get_custom_head():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     head = ""
 
+    # theme.js resolves the theme and puts it in the URL before Gradio boots (the ImageEditor canvas
+    # paints itself once from the resolved theme); --theme has to be visible to it first.
+    if args_manager.args.theme:
+        head += f'<script>window.__refocus_theme = "{args_manager.args.theme}";</script>'
+    theme_js = os.path.join(root, "javascript", "theme.js")
+    if os.path.exists(theme_js):
+        with open(theme_js, "r", encoding="utf-8") as f:
+            head += f"<script>{f.read()}</script>"
+    else:
+        print(f'[ReFocus] Custom JS not found: {theme_js}')
+
     css_path = os.path.join(root, "css", "style.css")
     if os.path.exists(css_path):
         with open(css_path, "r", encoding="utf-8") as f:
@@ -48,9 +59,6 @@ def get_custom_head():
                 head += f"<script>{f.read()}</script>"
         else:
             print(f'[ReFocus] Custom JS not found: {js_file_path}')
-
-    if args_manager.args.theme:
-        head += f'<script>set_theme("{args_manager.args.theme}");</script>'
 
     return head
 
@@ -327,8 +335,10 @@ with gradio_root:
             rembg_button.click(rembg_callback, inputs=[rembg_input, rembg_model], outputs=rembg_output, show_progress="full")
 
             with gr.Tab("Prompt Helper"):
+                # The theme comes from javascript/theme.js, which sets this iframe's src to the
+                # resolved theme (it used to be hardcoded dark).
                 gr.HTML(
-                    '<iframe src="/prompt-helper/?__theme=dark" '
+                    '<iframe id="prompt-helper-iframe" src="/prompt-helper/" '
                     'width="100%" height="800px" frameborder="0"></iframe>'
                 )
 

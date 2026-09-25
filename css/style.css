@@ -207,3 +207,58 @@
 footer {
     visibility: hidden
 }
+/* --- theme-following pieces ---------------------------------------------------------------
+   Gradio adds the class `dark` to <body> when the resolved theme is dark (measured), so these key
+   off that class rather than a media query: a theme picked in Gradio's own settings panel has to win
+   over the system preference. The values listed first are the light ones; the ones under .dark are
+   what the UI used to hardcode. */
+
+.dark .canvas-tooltip-info::after,
+.dark .canvas-tooltip-info::before {
+    background-color: #e0e0e0;
+}
+
+.dark .canvas-tooltip-content {
+    background-color: #2b2b2b;
+    color: #e0e0e0;
+    border-color: #4d4d4d;
+}
+
+/* The fullpage viewer used to be dark whatever the theme was. */
+#lightboxModal {
+    background-color: rgba(244, 244, 245, 0.96);
+}
+
+.dark #lightboxModal {
+    background-color: rgba(20, 20, 20, 0.95);
+}
+
+.modalControls span,
+.modalPrev,
+.modalNext {
+    color: #222;
+}
+
+.dark .modalControls span,
+.dark .modalPrev,
+.dark .modalNext {
+    color: white;
+}
+
+.modalControls:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+.dark .modalControls:hover {
+    background-color: rgba(0, 0, 0, 0.9);
+}
+
+.modalPrev:hover,
+.modalNext:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+.dark .modalPrev:hover,
+.dark .modalNext:hover {
+    background-color: rgba(0, 0, 0, 0.8);
+}
