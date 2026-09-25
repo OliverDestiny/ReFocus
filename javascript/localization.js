@@ -105,20 +105,25 @@ function localizeWholePage() {
     }
 }
 
-document.addEventListener("DOMContentLoaded", function() {
+function bootstrapLocalization() {
     if (!hasLocalization()) {
         return;
     }
 
-    onUiUpdate(function(m) {
-        m.forEach(function(mutation) {
-            mutation.addedNodes.forEach(function(node) {
-                processNode(node);
-            });
-        });
-    });
+    // Gradio 6 injects this file *after* DOMContentLoaded and mounts its UI asynchronously, so
+    // neither a one-shot pass at load time nor an onUiUpdate hook is enough: the hook is registered
+    // too late to have seen the boot, and the page is empty when the hook is set up. A body-level
+    // observer plus a debounced full pass covers both, and also re-translates what Svelte replaces.
+    var pending = null;
 
-    localizeWholePage();
+    function scheduleLocalize() {
+        clearTimeout(pending);
+        pending = setTimeout(localizeWholePage, 150);
+    }
+
+    new MutationObserver(scheduleLocalize).observe(document.body, {childList: true, subtree: true});
+    window.addEventListener('load', scheduleLocalize);
+    scheduleLocalize();
 
     if (localization.rtl) { // if the language is from right to left,
         (new MutationObserver((mutations, observer) => { // wait for the style to load
@@ -137,4 +142,10 @@ document.addEventListener("DOMContentLoaded", function() {
             });
         })).observe(gradioApp(), {childList: true});
     }
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener("DOMContentLoaded", bootstrapLocalization);
+} else {
+    bootstrapLocalization();
+}

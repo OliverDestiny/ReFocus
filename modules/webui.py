@@ -40,8 +40,8 @@ def get_custom_head():
     # localization first: the other scripts call onUiLoaded, which script.js defines.
     head += f"<script>{localization_js(args_manager.args.language)}</script>"
 
-    for js_file in ["script.js", "contextMenus.js", "zoom.js", "edit-attention.js", "viewer.js",
-                    "imageviewer.js"]:
+    for js_file in ["script.js", "localization.js", "contextMenus.js", "zoom.js", "edit-attention.js",
+                    "viewer.js", "imageviewer.js"]:
         js_file_path = os.path.join(root, "javascript", js_file)
         if os.path.exists(js_file_path):
             with open(js_file_path, "r", encoding="utf-8") as f:
