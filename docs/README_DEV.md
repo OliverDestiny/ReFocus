@@ -102,6 +102,19 @@ latter, because a renamed key has to keep accepting the old spelling.
 
 ### Where the shared UI parameters live
 
+The left column's tab bar is **Generation** (viewer/gallery), the standalone tools **Describe**,
+**Metadata**, **rembg** and **Prompt Helper**, in that order; the prompt row, the Generate/Polish
+buttons, the two checkboxes and the Draft history accordion sit below the tab bar and stay visible
+whichever tab is open.
+
+- Describe and Metadata used to live inside the Input Image panel, which was wrong on their own terms:
+  that checkbox means "an input image takes part in generation", while both of them are standalone
+  helpers (Describe writes into the prompt box, Metadata loads parameters into the controls) and were
+  unreachable without first declaring an input image.
+- With that, the Input Image panel is only the three generation modes — Upscale or Variation, Image
+  Prompt and Inpaint — and selecting Describe no longer writes `current_tab`, which used to silently
+  drop an already-chosen Inpaint or Upscale mode.
+
 The right column has three tabs and the split is deliberate: **Settings** for what a normal session
 touches, **Models** for the model pickers, and **Advanced** for the parameters that have no normal
 counterpart. There is no developer-mode gate on any of it — the old "Advanced mode" checkbox only

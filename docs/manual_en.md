@@ -12,7 +12,23 @@ That's it. All advanced features are optional. You only need a prompt to get sta
 
 ## Tools
 
-Two standalone tools are available as tabs at the top of the main interface.
+Four standalone tools are available as tabs at the top of the main interface.
+
+### Describe (Prompt Reverse Engineering)
+
+Upload an image, and the system will analyze it and generate a descriptive prompt automatically. Two modes are available:
+
+- Photograph mode
+- Art/Anime mode
+
+### Metadata
+
+If you have a previously generated ReFocus image with embedded parameters, you can:
+
+- Upload it to view the complete parameter record
+- Click "Apply Metadata" to load all parameters back into the UI for easy reproduction
+
+---
 
 ### rembg
 
@@ -43,7 +59,7 @@ The tool runs in a separate panel. You can combine prompts in the builder, then 
 
 ## Controlling Image Generation
 
-For more control, check **Input Image** — four tool panels will expand below.
+For more control, check **Input Image** — three tool panels will expand below.
 
 ### Upscale or Variation (UOV)
 
@@ -107,22 +123,6 @@ Check **"Show Mask Generation"** to let the system automatically analyze the ima
 - **isnet-anime**: Optimized for anime/illustration style images
 
 Select a model and click **"Generate mask from image"**. The mask will be overlaid on the image. You can still manually adjust the mask (paint or erase) before performing the inpaint operation.
-
-### Describe (Prompt Reverse Engineering)
-
-Upload an image, and the system will analyze it and generate a descriptive prompt automatically. Two modes are available:
-
-- Photograph mode
-- Art/Anime mode
-
-### Metadata
-
-If you have a previously generated ReFocus image with embedded parameters, you can:
-
-- Upload it to view the complete parameter record
-- Click "Apply Metadata" to load all parameters back into the UI for easy reproduction
-
----
 
 ## Advanced Settings (Right Panel)
 
