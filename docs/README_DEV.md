@@ -161,7 +161,7 @@ defaults to **12345**, the core's own default is 8188, and `GRADIO_SERVER_PORT` 
 
 ### Custom CSS/JS and `js=` callbacks
 
-`modules/webui.get_custom_head()` reads `css/style.css` and the five scripts under `javascript/`,
+`modules/webui.get_custom_head()` reads `css/style.css` and the scripts under `javascript/`,
 **relative to the repository root** (the parent of `modules/`), and appends them to `<head>`. A wrong
 path here fails silently — each file is skipped and the page simply loses that script — so every miss
 is printed at startup and `.zcode/probes/ui_probe.py` asserts the whole set is present. When these
@@ -172,6 +172,43 @@ but every custom feature was dead, including the Input Image checkbox, whose eve
 For that reason the state-changing part of an event never carries `js`: a throwing js callback aborts
 the whole event (no server round trip at all), so `input_image_checkbox.change(...)` updates the panel
 visibility on its own and the scrolling runs in a following `.then(fn=lambda: None, js=...)`.
+
+### Theme
+
+The theme is resolved once, in `javascript/theme.js`, **before Gradio boots**: an explicit `?__theme=`
+wins (that is what Gradio's own settings panel writes), then `--theme` (the server passes it as
+`window.__refocus_theme`), then the system preference. The result is written back into the URL with
+`history.replaceState`, which is why the address bar carries `?__theme=dark|light` while the page never
+reloads.
+
+- **Why the URL and not just the class**: Gradio's `ImageEditor` creates its Pixi app once, at mount,
+  with `backgroundColor: theme_mode === 'dark' ? '#27272a' : '#ffffff'`. With only a system preference
+  Gradio resolves the theme in an effect that runs *after* that, so a dark desktop still got a white
+  canvas — and no CSS can reach a WebGL buffer. Once the theme is in the URL, Gradio resolves it from
+  the first evaluation and the canvas comes up dark (measured with `?__theme=dark`).
+- A theme changed mid-session does not repaint that canvas; the rest of the UI follows the class
+  Gradio toggles.
+- **Gradio puts the `dark` class on `<body>`**, not on `<html>` (measured; `:root.dark` selectors
+  silently match nothing). Our theme-following CSS in `css/style.css` therefore keys on `.dark`.
+- The Prompt Helper iframe takes its theme from the same resolved value: `theme.js` sets its `src` to
+  `/prompt-helper/?__theme=<resolved>` once the element exists (Gradio mounts that tab lazily) and
+  re-applies it if the system theme changes while nothing is pinned in the URL.
+
+### Localization (`--language`)
+
+`python launch.py --language zh` reads `language/zh.json` and the server emits it as
+`window.localization`; `javascript/localization.js` rewrites matching text nodes, `title`s and
+placeholders in the page. The file is a flat `{"English string": "translation"}` map; anything it does
+not mention stays English. `language/default.json` (gitignored) is the user's own override and may be
+absent; any *other* missing file is reported in the log instead of silently doing nothing.
+
+- `tools/dump_ui_strings.py` walks the built UI and writes every user-facing string to
+  `language/en.json` as an identity map. Copy it, translate the values, and that copy is your
+  `--language` file.
+- The bootstrap in `localization.js` does **not** wait for `DOMContentLoaded`: Gradio injects `<head>`
+  after that event, so the handler never ran and the page stayed English. It runs immediately when the
+  document is already loaded and then translates on a body-level MutationObserver with a debounced full
+  pass, which also covers what Svelte re-renders.
 
 ### Stack
 

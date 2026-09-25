@@ -39,7 +39,7 @@ ReFocus/
 │
 ├── javascript/            # Custom JavaScript for UI interaction
 ├── css/                   # Custom CSS styles
-├── assets/                # Static assets (favicon, etc.)
+├── assets/                # Static assets (the favicon)
 │
 ├── prompt_helper/         # Prompt Helper integration
 ├── presets/               # UI presets (JSON)
