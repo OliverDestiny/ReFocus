@@ -350,9 +350,12 @@ with gradio_root:
                     if isinstance(default_prompt, str) and default_prompt != '':
                         gradio_root.load(lambda: default_prompt, outputs=prompt)
 
-                with gr.Column(scale=3, min_width=0):
-                    generate_button = gr.Button(value="Generate", elem_classes='type_row', elem_id='generate_button', visible=True)
-                    load_parameter_button = gr.Button(value="Load Parameters", elem_classes='type_row', elem_id='load_parameter_button', visible=False)
+                with gr.Column(scale=3, min_width=0, elem_classes='prompt_buttons'):
+                    # The primary buttons share this row's height with the prompt box (see
+                    # .prompt_buttons in modules/html.py): one visible button fills the row, two split
+                    # it with the gap between them.
+                    generate_button = gr.Button(value="Generate", elem_classes='prompt_button', elem_id='generate_button', visible=True)
+                    load_parameter_button = gr.Button(value="Load Parameters", elem_classes='prompt_button', elem_id='load_parameter_button', visible=False)
                     skip_button = gr.Button(value="Skip", elem_classes='type_row_half', visible=False)
                     stop_button = gr.Button(value="Stop", elem_classes='type_row_half', elem_id='stop_button', visible=False)
 

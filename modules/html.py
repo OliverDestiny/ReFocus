@@ -68,17 +68,42 @@ progress::after {
   height: 30px !important;
 }
 
-/* The prompt row is as tall as its content: a fixed 80px clipped the Generate column once the
-   Polish Draft button became visible next to Generate, and the overflow landed on the checkbox row
-   and the draft history below it. */
+/* The prompt row is a fixed 176px and both sides fill it, so the text box and the buttons line up
+   exactly: one visible primary button takes the whole row, and two of them split it into two halves
+   with the 16px gap between them (2 x 80 + 16 = 176, which is what the Anima branch shows with
+   "Split into Draft and Polish"). A fixed height cannot be overflowed the way the old height:80px
+   was when the second button appeared. */
 .type_row{
-  height: auto !important;
-  min-height: 80px !important;
+  height: 176px !important;
 }
 
-/* A taller main prompt box: long prompts should not need the scrollbar. */
-#positive_prompt{
-  height: 140px !important;
+/* Gradio sizes this textarea from lines=1024, i.e. tens of thousands of pixels, and the wrapper used
+   to clip it. A percentage height only resolves against a definite one, and the textarea sits three
+   levels down (block > label > .input-container > textarea), so the whole chain has to be given the
+   box's height; then the textarea scrolls its own text instead of being clipped. */
+#positive_prompt > label,
+#positive_prompt .input-container,
+#positive_prompt textarea{
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+.prompt_buttons{
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+}
+
+.prompt_buttons > .prompt_button{
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+/* Skip and Stop keep their own small height and do not join the stretching. */
+.prompt_buttons > .type_row_half{
+  flex: 0 0 auto !important;
 }
 
 .type_row_half{
