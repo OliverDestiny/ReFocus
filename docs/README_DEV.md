@@ -272,7 +272,10 @@ Two rules follow from that, and both matter:
 
 1. **Do not edit anything under `comfy/`.** ReFocus' own behaviour lives in `modules/`, and the
    injection layer is confined to `modules/patch.py` — currently three patches:
-   `SDXL.encode_adm`, a thin wrapper around `ControlNet.forward`, and a load-time logger. Every
+   `SDXL.encode_adm`, a thin wrapper around `ControlNet.forward`, and a load-time logger that stays
+   quiet while a tqdm progress bar is on screen (a print between two bar updates ends the line tqdm
+   is redrawing, so a per-step model load — the Anima draft preview decodes through a VAE every step
+   — would leave one bar per step behind; loads outside a bar still print). Every
    replacement is asserted to have taken effect in `patch_all()`, so an upstream change makes it
    fail loudly at startup rather than silently stop working.
 2. **There is no commitment to track upstream.** The point of keeping the copy unmodified is that

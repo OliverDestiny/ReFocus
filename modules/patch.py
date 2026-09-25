@@ -12,6 +12,7 @@ import os
 import torch
 import time
 import math
+import tqdm
 import warnings
 import safetensors.torch
 
@@ -226,7 +227,10 @@ def patched_load_models_gpu(*args, **kwargs):
     execution_start_time = time.perf_counter()
     y = comfy.model_management.load_models_gpu_origin(*args, **kwargs)
     moving_time = time.perf_counter() - execution_start_time
-    if moving_time > 0.1:
+    # Silent while a progress bar is on screen: a load inside a sampling loop (the draft preview
+    # decodes through a VAE every step) would end the line tqdm is redrawing, so each step would
+    # leave its own bar behind. Same in-loop heuristic as comfy/model_patcher.py.
+    if moving_time > 0.1 and not getattr(tqdm.tqdm, '_instances', None):
         print(f'[ReFocus Model Management] Moving model(s) has taken {moving_time:.2f} seconds')
     return y
 
