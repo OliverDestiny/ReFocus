@@ -306,7 +306,7 @@ The worker communicates with the UI via `AsyncTask.yields`:
 
 Defines the entire Gradio UI. Key sections:
 
-- **Main UI**: `gr.Blocks` with tabs (Generation, Photopea, rembg, Prompt Helper)
+- **Main UI**: `gr.Blocks` with tabs (Generation, rembg, Prompt Helper)
 - **Input Image Panel**: UOV (Upscale/Vary), Image Prompt, Inpaint, Describe, Metadata
 - **Settings Panel**: Steps, Aspect Ratios, Models, LoRAs, Advanced debug tools
 - **Parameter Assembly**: `ctrls` list defines the order of parameters passed to `async_worker`

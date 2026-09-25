@@ -56,15 +56,6 @@ def get_custom_head():
 
 # ========== Constants ==========
 PROMPT_HELPER_PORT = 17860
-PHOTOPEA_MAIN_URL = "https://www.photopea.com/"
-PHOTOPEA_IFRAME_ID = "webui-photopea-iframe"
-PHOTOPEA_IFRAME_HEIGHT = 684
-PHOTOPEA_IFRAME_WIDTH = "100%"
-PHOTOPEA_IFRAME_LOADED_EVENT = "onPhotopeaLoaded"
-
-def get_photopea_url_params():
-    return "#%7B%22resources%22:%5B%22data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIAAQMAAADOtka5AAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAADZJREFUeJztwQEBAAAAgiD/r25IQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfBuCAAAB0niJ8AAAAABJRU5ErkJggg==%22%5D%7D"
-
 def first_valid(value, choices, default=None):
     """Coerce a config/CLI value into the widget's choices; falls back choices -> default -> first.
     Contract and failure mode: README_DEV, "Widget values must be members of their choices"."""
@@ -279,26 +270,6 @@ with gradio_root:
                                      elem_id='final_gallery',
                                      value=["assets/favicon.png"],
                                      preview=True)
-            with gr.Tab("Photopea"):
-                # Photopea sits behind a Cloudflare bot check. A top-level tab can pass it, an iframe
-                # cannot (the clearance cookie is a third-party cookie there), so the embedded editor
-                # can come up as "refused to connect". The button is the way out; it carries the same
-                # API parameters the iframe uses.
-                gr.Markdown(
-                    "If the editor below shows a refused connection, Photopea's bot check could not run "
-                    "inside the frame. Use the button to open the same editor in its own tab.")
-                open_photopea = gr.Button(value='Open Photopea in a new tab', variant='secondary',
-                                          link=f"{PHOTOPEA_MAIN_URL}{get_photopea_url_params()}",
-                                          link_target='_blank')
-                with gr.Row():
-                    photopea = gr.HTML(
-                        f"""<iframe id="{PHOTOPEA_IFRAME_ID}" 
-                        src = "{PHOTOPEA_MAIN_URL}{get_photopea_url_params()}" 
-                        width = "{PHOTOPEA_IFRAME_WIDTH}" 
-                        height = "{PHOTOPEA_IFRAME_HEIGHT}"
-                        onload = "{PHOTOPEA_IFRAME_LOADED_EVENT}(this)">"""
-                    )
-                gr.Markdown("Powered by [🦜 Photopea API](https://www.photopea.com/api)")
             with gr.Tab("rembg"):
                 with gr.Column(scale=1):
                     rembg_input = gr.Image(label='Drag above image to here', sources=['upload'], type='filepath', scale=20)

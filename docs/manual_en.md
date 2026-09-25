@@ -12,17 +12,7 @@ That's it. All advanced features are optional. You only need a prompt to get sta
 
 ## Tools
 
-Three standalone tools are available as tabs at the top of the main interface.
-
-### Photopea
-
-**Photopea** is an online professional image editor (similar to Photoshop). You can use it without leaving ReFocus for:
-
-- Cropping and resizing
-- Layers and masks
-- Color correction and retouching
-
-> An internet connection is required for this feature.
+Two standalone tools are available as tabs at the top of the main interface.
 
 ### rembg
 
