@@ -110,10 +110,28 @@ This project does not include model files. Users must provide their own SDXL mod
 
 ## Acknowledgements
 
-- [Fooocus](https://github.com/lllyasviel/Fooocus) by lllyasviel
-- [DeFooocus](https://github.com/ehristoforu/DeFooocus) by ehristoforu
-- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) (the `comfy/` core is an unmodified copy)
-- [Prompt Helper](https://github.com/Physton/sd-webui-prompt-all-in-one-app) by Physton
-- Stable Diffusion research and open-source ecosystem
+ReFocus is a derivative work: it is rebuilt from [DeFooocus](https://github.com/ehristoforu/DeFooocus),
+which in turn builds on [Fooocus](https://github.com/lllyasviel/Fooocus). Both are GPL-3.0, as is this
+project. Thanks also to the Stable Diffusion research and open-source ecosystem.
+
+### Third-party components
+
+The following third-party code is redistributed inside this repository. **No model weights are
+included** — every model a feature needs is downloaded by the user or by the application itself.
+
+| Component | Where | License |
+| :--- | :--- | :--- |
+| [ComfyUI](https://github.com/comfyanonymous/ComfyUI) — an unmodified copy (vendored core) | `comfy/` | GPL-3.0 |
+| [BLIP](https://github.com/salesforce/BLIP) — image captioning | `extras/BLIP/` | BSD-3-Clause (Salesforce) |
+| [facexlib](https://github.com/xinntao/facexlib) — face detection and parsing | `extras/facexlib/` | MIT (Xintao Wang) |
+| [ComfyUI-WD14-Tagger](https://github.com/pythongosssss/ComfyUI-WD14-Tagger) — WD14 tagging | `extras/wd14tagger.py` | MIT (pythongosssss) |
+| [ESRGAN](https://github.com/xinntao/ESRGAN) — upscaler support | `extras/esrgan/` | BSD-3-Clause |
+| [sd-webui-prompt-all-in-one-app](https://github.com/Physton/sd-webui-prompt-all-in-one-app) — Prompt Helper | `prompt_helper/` | MIT (Physton) |
+| [Fooocus](https://github.com/lllyasviel/Fooocus) — the codebase this UI was built from | — | GPL-3.0 |
+| [DeFooocus](https://github.com/ehristoforu/DeFooocus) — direct parent project | — | GPL-3.0 |
+| Stable Diffusion model configuration files | `models/configs/` | from the Stable Diffusion repositories |
+
+Each component keeps its own license and copyright; the notices that ship with them (for example
+`prompt_helper/LICENSE` and `extras/esrgan/LICENSE-ESRGAN`) are kept in place.
 
 ---
