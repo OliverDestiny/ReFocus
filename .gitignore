@@ -57,3 +57,4 @@ user_path_config-deprecated.txt
 opencode.json
 /.opencode/
 /.zcode/
+/.zcodeignore
