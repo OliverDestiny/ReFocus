@@ -136,6 +136,16 @@ ordered by how often a normal session touches each control, most used at the top
 - Refiner Switch: Controls at which step to switch to the refiner.
 - Up to 5 LoRAs can be loaded simultaneously, each with individually adjustable weights.
 
+### Resolution and VRAM
+
+A generation needs room for two things: the models themselves (about 6.6 GB for Illustrious with its
+text encoders, 5.4 GB for Anima) and a decode budget that grows with the picture — roughly 4.3 KB per
+output pixel, so 4.4 GB at 1024×1024 and 6.6 GB at 1024×1536. When the card cannot hold both, ReFocus
+hands the models back just before that decode: the decode stays fast instead of crawling, and the
+models reload in 1.5-2.6 seconds for the next generation. Resolution is therefore the main lever on a
+small card — 8 GB is comfortable around 1024×1024, and 4 GB cards are not a support target (use
+512×512 there).
+
 ### Advanced (Debug Tools / Control / Inpaint)
 
 > ⚠️ **Warning**

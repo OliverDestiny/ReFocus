@@ -288,6 +288,43 @@ def vae_parse(latent):
     return {'samples': result}
 
 
+# A decode is clean only with room to spare: comfy reserves `memory_used_decode` plus a margin, so
+# "free >= reservation" is not enough (measured: 4 s of juggling just below the reservation against
+# ~2 s once released). The factor sits between the fastest measured "no release" case and the ones
+# that had to move models.
+DECODE_FREE_MARGIN = 1.25
+
+
+def release_pipeline_for_decode(vae, latent):
+    """Gives the sampling models back when this decode's reservation does not fit in free VRAM.
+
+    comfy reserves a large amount for a VAE decode (SDXL: `2178 * latent pixels * 64 * dtype`, i.e.
+    6.5 GB at 1024x1536) and, with the UNet and the text encoder still resident, cannot find it:
+    measured at 1024x1536, 4-82 s of memory juggling against 0.5-2 s once they are released. Weights
+    stay in RAM and cost 1.4-4.8 s to reload. Nothing needs the sampling models after a decode, and
+    the two-stage flow already relies on the same release before the draft's decode.
+
+    Numbers and the resolution table: docs/README_DEV.md, "VRAM budget".
+    """
+    samples = latent['samples'] if isinstance(latent, dict) else latent
+    if getattr(samples, 'is_nested', False):
+        samples = samples.unbind()[0]
+    need = vae.memory_used_decode(samples.shape, vae.vae_dtype)
+    free = comfy.model_management.get_free_memory()
+    if free >= need * DECODE_FREE_MARGIN:
+        return False
+
+    before = len(comfy.model_management.current_loaded_models)
+    for model in (final_unet, final_refiner_unet, final_clip):
+        if model is not None:
+            comfy.model_management.unload_model_and_clones(getattr(model, 'patcher', model))
+    freed = before - len(comfy.model_management.current_loaded_models)
+    if freed > 0:
+        print(f'[Illustrious] Released {freed} model(s) before the VAE decode '
+              f'(reservation {need / 2 ** 20:.0f}MB, free {free / 2 ** 20:.0f}MB).')
+    return True
+
+
 @torch.no_grad()
 @torch.inference_mode()
 def calculate_sigmas_all(sampler, model, scheduler, steps):
@@ -428,6 +465,7 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
         target_model = target_refiner_vae
         if target_model is None:
             target_model = target_vae
+        release_pipeline_for_decode(target_model, sampled_latent)
         decoded_latent = core.decode_vae(vae=target_model, latent_image=sampled_latent, tiled=tiled)
 
     if has_distinct_refiner:
@@ -471,6 +509,7 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
         target_model = target_refiner_vae
         if target_model is None:
             target_model = target_vae
+        release_pipeline_for_decode(target_model, sampled_latent)
         decoded_latent = core.decode_vae(vae=target_model, latent_image=sampled_latent, tiled=tiled)
 
     if refiner_swap_method == 'vae':
@@ -539,6 +578,7 @@ def process_diffusion(positive_cond, negative_cond, steps, switch, width, height
         target_model = target_refiner_vae
         if target_model is None:
             target_model = target_vae
+        release_pipeline_for_decode(target_model, sampled_latent)
         decoded_latent = core.decode_vae(vae=target_model, latent_image=sampled_latent, tiled=tiled)
 
     images = core.pytorch_to_numpy(decoded_latent)

@@ -300,6 +300,58 @@ to False — it is kept because it is the mechanism that would let larger models
 VRAM). Both are versioned independently of ComfyUI and have had breaking changes within the same
 minor line, so do not float them.
 
+### VRAM budget
+
+Two model lines can run, each keeping its weights in VRAM while it works. Measured `model_size()`
+on this machine, in MB:
+
+| Line | Weights | Total |
+| :--- | :--- | ---: |
+| Illustrious (SDXL) | UNet 4897 + text encoders 1561 + VAE 160 | **6618** |
+| Anima | DiT 3988 + text encoder 1137 + VAE 242 | **5367** |
+
+Optional pieces (file weights): Control-LoRA 377 each, ControlNet++ union 2397, IP-Adapter 967
+(also needs CLIP-ViT-H, not vendored), MiDaS 470, FaceSwap 104+81, LoRAs 41-375, preview TAE 43.
+
+**The limit is not the weights, it is the decode.** Before a VAE decode comfy reserves
+`memory_used_decode(latent_shape, dtype)` and frees whatever it must to get it:
+
+| Resolution | Wan (Anima draft) | SDXL (Illustrious) |
+| :--- | ---: | ---: |
+| 1024x1024 | 4400 | 4356 |
+| 1024x1536 | 6600 | 6534 |
+| 1152x2048 | 9900 | 9801 |
+| 1536x2048 | 13200 | 13068 |
+
+Both lines work out to about **4.3 KB per output pixel** (`2178 * latent pixels * 64 * dtype` for
+SDXL, `2200 * ...` for Wan). With the sampling models still resident that reservation cannot be met,
+so comfy moves them out *during* the decode: measured at 1024x1536 with the models resident, the
+decode took **5.8 s, 12.9 s, 81.7 s and 146.7 s** in different runs against **0.6-1.2 s** when it has
+the card to itself. That spread is driver-level — on Windows the excess spills to system RAM, which is
+also what makes the whole desktop stutter, and it is why comfy raises its own reserve to 600 MB here
+(`comfy/model_management.py`). Nothing in the process is slow; the memory movement is.
+
+Both lines therefore give VRAM back before decoding:
+
+- **Illustrious**: `release_pipeline_for_decode(vae, latent)` (called before every `core.decode_vae`
+  in `process_diffusion`) releases the UNet, the refiner UNet and the text encoders — not the VAE —
+  when `free < reservation * 1.25`, and prints one line saying so. Small generations keep their
+  models; reloading costs 1.5-2.6 s, measured. The margin is deliberate: `free >= reservation` is
+  not enough, because comfy asks for `reservation * 1.1 + (reservation + reserve)`.
+- **Anima draft**: `AnimaModel.generate` releases unconditionally right after sampling (the draft
+  needs nothing else, and the old behaviour paid the reload during the decode anyway); the branch
+  docs carry the measurements.
+
+**Modes**, at 1024x1536 on an 11.9 GB card with about 10.7 GB free (idle desktop ~1.2 GB): the draft
+decode comes after a release, so it runs at 0.5 s; the Illustrious decode runs at 0.6-1.2 s once the
+models are released, and at 3-147 s if they are not. Peak reserved: pure Illustrious 8.1 GB,
+draft-only 5.1 GB, two-stage 8.8 GB.
+
+**Low VRAM**: the reservation is what the card must hold *besides* the desktop and the running
+models, so 8 GB is comfortable only around 1024x1024, and 4 GB is not a support target — use 512x512
+there. `--lowvram` and `--reserve-vram` are core flags that pass straight through
+(`modules/args_manager.py`); neither has been measured here.
+
 ---
 
 ## Development Setup
