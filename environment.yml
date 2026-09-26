@@ -127,4 +127,3 @@ dependencies:
       - urllib3==2.7.0
       - uvicorn==0.51.0
       - zipp==4.1.0
-prefix: D:\Program\anaconda3\envs\rfs
